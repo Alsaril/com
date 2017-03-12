@@ -21,13 +21,23 @@ public class Utility {
         return new String(hexChars);
     }
 
-    public static String fileHash(java.io.File file) {
+    public static byte[] hexToBytes(String s) {
+        int len = s.length();
+        byte[] data = new byte[len / 2];
+        for (int i = 0; i < len; i += 2) {
+            data[i / 2] = (byte) ((Character.digit(s.charAt(i), 16) << 4)
+                    + Character.digit(s.charAt(i + 1), 16));
+        }
+        return data;
+    }
+
+    public static Message.Hash fileHash(java.io.File file) {
         MessageDigest md;
         long start = System.currentTimeMillis();
         try {
             md = MessageDigest.getInstance("MD5");
         } catch (NoSuchAlgorithmException e) {
-            return "";
+            return null;
         }
         try (InputStream is = new BufferedInputStream(new FileInputStream(file))) {
             byte[] buffer = new byte[BLOCK_SIZE];
@@ -37,10 +47,15 @@ public class Utility {
                 md.update(buffer, 0, read);
             }
         } catch (IOException e) {
-            return "";
+            return null;
         }
         long end = System.currentTimeMillis();
         System.out.println("Hash " + (end - start) / 1000 + " s.");
-        return bytesToHex(md.digest());
+        return new Message.Hash(md.digest());
+    }
+
+    public static String trimZeros(String str) {
+        int pos = str.indexOf(0);
+        return pos == -1 ? str : str.substring(0, pos);
     }
 }

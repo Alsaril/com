@@ -68,7 +68,7 @@ public class MainWindow {
             JProgressBar progressBar = new JProgressBar(0, 100);
             progressBar.setValue(progress);
             progressBar.setStringPainted(true);
-            JLabel hash = new JLabel(file.hash);
+            JLabel hash = new JLabel(file.hash.toString());
             elemPanel.add(name, BorderLayout.NORTH);
             elemPanel.add(progressBar, BorderLayout.CENTER);
             elemPanel.add(hash, BorderLayout.SOUTH);
@@ -146,7 +146,7 @@ public class MainWindow {
         l2.start_appl();
     }
 
-    public void showUploadDialog(String hash, String name, long size) {
+    public void showUploadDialog(Message.Hash hash, String name, long size) {
         SwingUtilities.invokeLater(() -> {
             final JOptionPane optionPane = new JOptionPane(
                     "Загрузить файл\n"
@@ -175,9 +175,9 @@ public class MainWindow {
 
             int value = (Integer) optionPane.getValue();
             if (value == JOptionPane.YES_OPTION) {
-                applicationLayer.accept(name, hash, true);
+                applicationLayer.accept(hash, name, true);
             } else if (value == JOptionPane.NO_OPTION) {
-                applicationLayer.accept(name, hash, false);
+                applicationLayer.accept(hash, name, false);
             }
         });
     }

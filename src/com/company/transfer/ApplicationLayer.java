@@ -6,7 +6,6 @@ import com.company.transfer.interfaces.ILinkLayer;
 import javax.swing.*;
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -20,7 +19,7 @@ import java.util.concurrent.locks.ReentrantLock;
 
 public class ApplicationLayer implements IApplicationLayer {
 
-    private HashMap<String, File> files = File.loadFiles("files.txt");
+    private HashMap<Message.Hash, File> files = File.loadFiles("files.txt");
     private ArrayList<File> uploadFiles = new ArrayList<>();
     private ArrayList<File> downloadFiles = new ArrayList<>();
     private Model model = new Model(this);
@@ -46,9 +45,8 @@ public class ApplicationLayer implements IApplicationLayer {
 
     @Override
     public void receive_msg(byte[] message) {
-        Message m = new Message(message);
+        Message m = Message.parse(message);
         addEvent(m, Event.EventType.OUTER);
-
     }
 
     @Override
@@ -143,12 +141,7 @@ public class ApplicationLayer implements IApplicationLayer {
             File file = new File(selectedFile);
             files.put(file.hash, file);
             model.contentChanged();
-            String name = file.name;
-            ByteBuffer bb = ByteBuffer.allocate(4 + name.length() * 2 + 8);
-            bb.putInt(name.length());
-            bb.put(name.getBytes());
-            bb.putLong(file.size);
-            Message message = new Message(file.hash, Message.MessageType.UPLOAD_REQUEST, 0, bb.array());
+            Message message = new UploadRequestMessage(file.hash, file.name, file.size);
             addEvent(message, Event.EventType.INNER);
         } catch (FileNotFoundException e) {
 
@@ -203,7 +196,6 @@ public class ApplicationLayer implements IApplicationLayer {
                 switch (m.type) {
                     case DATA:
                         if (downloadFiles.contains(file)) {
-                            System.out.println("Received " + m.block + ", expected " + file.getBlock());
                             if (m.block != file.getBlock()) {
                                 addEvent(new IOException("Block number conflict: " + m.block + " , " + file.getBlock()), Event.EventType.IO);
                             }
@@ -212,6 +204,7 @@ public class ApplicationLayer implements IApplicationLayer {
                                 Message message = new Message(m.hash, Message.MessageType.BLOCK_RECEIVE, file.getBlock(), null);
                                 addEvent(message, Event.EventType.INNER);
                                 file.incBlock();
+                                file.incShowBlock();
                                 model.contentChanged();
                             } catch (IOException e) {
                                 addEvent(e, Event.EventType.IO);
@@ -241,22 +234,19 @@ public class ApplicationLayer implements IApplicationLayer {
                         }
                         break;
                     case UPLOAD_REQUEST:
-                        window.showUploadDialog(m.hash, "Новый файл", 1231);
+                        UploadRequestMessage upm = (UploadRequestMessage) m;
+                        window.showUploadDialog(upm.hash, upm.name, upm.size);
                         break;
                     case UPLOAD_RESPONSE:
                         uploadLock.lock();
                         try {
                             uploadFiles.add(files.get(m.hash));
                             uploadCondition.signal();
-                            //TODO not ignore!
                         } finally {
                             uploadLock.unlock();
                         }
                         break;
                     case DOWNLOAD_REQUEST:
-
-                        // TODO show modal then UPLOAD_RESPONSE
-
                         break;
                     case DOWNLOAD_RESPONSE:
                         break;
@@ -278,7 +268,7 @@ public class ApplicationLayer implements IApplicationLayer {
         return model;
     }
 
-    public void accept(String name, String hash, boolean b) {
+    public void accept(Message.Hash hash, String name, boolean b) {
         if (b) {
             try {
                 java.io.File f = new java.io.File(name);

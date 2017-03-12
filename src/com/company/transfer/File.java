@@ -5,7 +5,7 @@ import java.util.HashMap;
 import java.util.Scanner;
 
 public class File {
-    public final String hash;
+    public final Message.Hash hash;
     public final String path;
     public final String name;
     public final long size;
@@ -16,7 +16,7 @@ public class File {
     private OutputStream os = null;
     private boolean error = false;
 
-    public File(String hash, String path, String name, long size, int block, long date) {
+    public File(Message.Hash hash, String path, String name, long size, int block, long date) {
         this.hash = hash;
         this.path = path;
         this.name = name;
@@ -25,7 +25,7 @@ public class File {
         this.date = date;
     }
 
-    public File(String hash, java.io.File file) throws FileNotFoundException {
+    public File(Message.Hash hash, java.io.File file) throws FileNotFoundException {
         this(hash, file.getAbsolutePath(), file.getName(), file.length(), 0, System.currentTimeMillis());
     }
 
@@ -37,11 +37,11 @@ public class File {
         this(new java.io.File(path));
     }
 
-    public static HashMap<String, File> loadFiles(String path) {
-        HashMap<String, File> result = new HashMap<>();
+    public static HashMap<Message.Hash, File> loadFiles(String path) {
+        HashMap<Message.Hash, File> result = new HashMap<>();
         try (Scanner sc = new Scanner(new BufferedInputStream(new FileInputStream(path)))) {
             while (sc.hasNext()) {
-                File f = new File(sc.nextLine(), sc.nextLine(), sc.nextLine(), sc.nextLong(), sc.nextInt(), sc.nextLong());
+                File f = new File(new Message.Hash(sc.nextLine()), sc.nextLine(), sc.nextLine(), sc.nextLong(), sc.nextInt(), sc.nextLong());
                 result.put(f.hash, f);
             }
         } catch (IOException e) {
