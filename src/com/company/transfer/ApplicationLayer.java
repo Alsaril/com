@@ -2,6 +2,12 @@ package com.company.transfer;
 
 import com.company.transfer.interfaces.IApplicationLayer;
 import com.company.transfer.interfaces.ILinkLayer;
+import com.company.transfer.message.Message;
+import com.company.transfer.message.UploadRequestMessage;
+import com.company.transfer.message.UploadResponseMessage;
+import com.company.transfer.utility.Event;
+import com.company.transfer.utility.File;
+import com.company.transfer.utility.Utility;
 
 import javax.swing.*;
 import java.io.FileNotFoundException;
@@ -9,7 +15,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.ListIterator;
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
@@ -19,7 +24,7 @@ import java.util.concurrent.locks.ReentrantLock;
 
 public class ApplicationLayer implements IApplicationLayer {
 
-    private HashMap<Message.Hash, File> files = File.loadFiles("files.txt");
+    private final HashMap<Message.Hash, File> files;
     private ArrayList<File> uploadFiles = new ArrayList<>();
     private ArrayList<File> downloadFiles = new ArrayList<>();
     private Model model = new Model(this);
@@ -33,14 +38,16 @@ public class ApplicationLayer implements IApplicationLayer {
     private MainWindow window;
 
     private ILinkLayer linkLayer;
-    private PriorityBlockingQueue<Event<?>> events = new PriorityBlockingQueue<>(100);
+    private PriorityBlockingQueue<Event<?>> events = new PriorityBlockingQueue<>();
 
-    public ApplicationLayer(ILinkLayer linkLayer) {
+    public ApplicationLayer(ILinkLayer linkLayer, String config) {
         this.linkLayer = linkLayer;
+        files = Utility.getFiles(config);
     }
 
-    public void setMainWindow(MainWindow window) {
+    public void setWindow(MainWindow window) {
         this.window = window;
+        model.contentChanged();
     }
 
     @Override
@@ -100,7 +107,7 @@ public class ApplicationLayer implements IApplicationLayer {
                 uploadLock.lock();
                 try {
                     for (File file : uploadFiles) {
-                        if (file.isError()) {
+                        if (file.isError() || !file.readyToTransfer()) {
                             continue;
                         }
                         int read;
@@ -158,19 +165,11 @@ public class ApplicationLayer implements IApplicationLayer {
         }
     }
 
-    public void save() {
-
-    }
 
     private void deleteFromUpload(File file) {
         uploadLock.lock();
         try {
-            for (ListIterator<File> i = uploadFiles.listIterator(); i.hasNext(); ) {
-                File f = i.next();
-                if (f.equals(file)) {
-                    i.remove();
-                }
-            }
+            uploadFiles.remove(file);
         } finally {
             uploadLock.unlock();
         }
@@ -181,15 +180,11 @@ public class ApplicationLayer implements IApplicationLayer {
             Message m = (Message) event.data;
             File file = files.get(m.hash);
             if (event.type == Event.EventType.INNER) {
+                System.out.println(m.toString());
                 try {
                     linkLayer.send_msg(m.toByte());
                 } catch (IOException e) {
                     addEvent(e, Event.EventType.IO);
-                }
-                if (m.type == Message.MessageType.COMPLETE) {
-                    deleteFromUpload(file);
-                } else if (m.type == Message.MessageType.UPLOAD_RESPONSE) {
-                    downloadFiles.add(file);
                 }
             } else {
                 // next lines are outer only
@@ -212,20 +207,34 @@ public class ApplicationLayer implements IApplicationLayer {
                         }
                         break;
                     case COMPLETE:
-                        try {
-                            file.getOs().flush();
-                            file.getOs().close();
-                        } catch (IOException e) {
-                            addEvent(e, Event.EventType.IO);
+                        if (uploadFiles.contains(file)) {
+                            file.setStatus(File.FileStatus.COMPLETE);
+                            uploadFiles.remove(file);
+                        } else if (downloadFiles.contains(file)) {
+                            try {
+                                file.getOs().flush();
+                                file.getOs().close();
+                            } catch (IOException e) {
+                                addEvent(e, Event.EventType.IO);
+                            }
+                            System.gc();
+                            if (Utility.fileHash(new java.io.File(file.path)).equals(file.hash)) {
+                                // TODO show complete
+                                file.setStatus(File.FileStatus.COMPLETE);
+                                addEvent(new Message(m.hash, Message.MessageType.COMPLETE, file.getBlock(), null), Event.EventType.INNER);
+                                System.out.println("Success");
+                            } else {
+                                // TODO show error
+                                file.setStatus(File.FileStatus.ERROR);
+                                addEvent(new Message(m.hash, Message.MessageType.ERROR, file.getBlock(), null), Event.EventType.INNER);
+                                System.out.println("Error");
+                            }
                         }
-                        System.gc();
-                        if (Utility.fileHash(new java.io.File(file.path)).equals(file.hash)) {
-                            // TODO show complete
-                            System.out.println("Success");
-                        } else {
-                            // TODO show error
-                            System.out.println("Error");
-                        }
+                        model.contentChanged();
+                        break;
+                    case ERROR:
+                        file.setStatus(File.FileStatus.ERROR);
+                        model.contentChanged();
                         break;
                     case BLOCK_RECEIVE:
                         if (file != null) {
@@ -238,13 +247,20 @@ public class ApplicationLayer implements IApplicationLayer {
                         window.showUploadDialog(upm.hash, upm.name, upm.size);
                         break;
                     case UPLOAD_RESPONSE:
-                        uploadLock.lock();
-                        try {
-                            uploadFiles.add(files.get(m.hash));
-                            uploadCondition.signal();
-                        } finally {
-                            uploadLock.unlock();
+                        UploadResponseMessage upm1 = (UploadResponseMessage) m;
+                        if (upm1.accept) {
+                            uploadLock.lock();
+                            try {
+                                file.setStatus(File.FileStatus.TRANSFER);
+                                uploadFiles.add(file);
+                                uploadCondition.signal();
+                            } finally {
+                                uploadLock.unlock();
+                            }
+                        } else {
+                            file.setStatus(File.FileStatus.DECLINED);
                         }
+                        model.contentChanged();
                         break;
                     case DOWNLOAD_REQUEST:
                         break;
@@ -276,6 +292,7 @@ public class ApplicationLayer implements IApplicationLayer {
                     f.createNewFile();
                 }
                 File file1 = new File(hash, f);
+                file1.setStatus(File.FileStatus.TRANSFER);
                 files.put(file1.hash, file1);
                 model.contentChanged();
                 downloadFiles.add(file1);
@@ -283,8 +300,7 @@ public class ApplicationLayer implements IApplicationLayer {
                 System.err.println();
             }
         }
-        Message m = new Message(hash, Message.MessageType.UPLOAD_RESPONSE, 0, new byte[]{b ? (byte) 1 : 0});
-        addEvent(m, Event.EventType.INNER);
+        addEvent(new UploadResponseMessage(hash, b), Event.EventType.INNER);
     }
 
     private static class Model extends AbstractListModel<File> {

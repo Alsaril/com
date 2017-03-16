@@ -1,18 +1,27 @@
 package com.company.transfer;
 
 import com.company.transfer.interfaces.ILinkLayer;
+import com.company.transfer.message.Message;
+import com.company.transfer.utility.File;
+import com.company.transfer.utility.Utility;
 
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 
 public class MainWindow {
-    static ApplicationLayer l1 = null;
-    static ApplicationLayer l2 = null;
+    private static final int PORT = 53454;
+    static ApplicationLayer l = null;
     private JFrame frame;
     private JButton open;
     private JButton close;
@@ -24,7 +33,7 @@ public class MainWindow {
 
     public MainWindow(ApplicationLayer applicationLayer) {
         this.applicationLayer = applicationLayer;
-        applicationLayer.setMainWindow(this);
+        applicationLayer.setWindow(this);
         frame = new JFrame();
         JPanel panel = new JPanel();
         open = new JButton("Open");
@@ -53,7 +62,7 @@ public class MainWindow {
         frame.addWindowListener(new WindowAdapter() {
                                     @Override
                                     public void windowClosing(WindowEvent e) {
-                                        applicationLayer.save();
+                                        Utility.save();
                                         System.exit(0);
                                     }
                                 }
@@ -68,7 +77,7 @@ public class MainWindow {
             JProgressBar progressBar = new JProgressBar(0, 100);
             progressBar.setValue(progress);
             progressBar.setStringPainted(true);
-            JLabel hash = new JLabel(file.hash.toString());
+            JLabel hash = new JLabel(file.hash + " (" + file.getStatus().toString() + ")");
             elemPanel.add(name, BorderLayout.NORTH);
             elemPanel.add(progressBar, BorderLayout.CENTER);
             elemPanel.add(hash, BorderLayout.SOUTH);
@@ -89,6 +98,17 @@ public class MainWindow {
     }
 
     public static void main(String[] args) {
+        if (args.length < 1) {
+            System.out.println("Not enough arguments");
+            return;
+        }
+        String arg = args[0];
+        if (arg == null) return;
+        if (!(arg.equals("client") || arg.equals("server"))) {
+            System.out.println("Invalid arguments");
+            return;
+        }
+        boolean server = arg.equals("server");
         try {
             for (UIManager.LookAndFeelInfo info : UIManager.getInstalledLookAndFeels()) {
                 if ("Windows".equals(info.getName())) {
@@ -98,7 +118,31 @@ public class MainWindow {
             }
         } catch (Exception e) {
         }
-        l1 = new ApplicationLayer(new ILinkLayer() {
+        Socket s;
+        ServerSocket ss;
+        try {
+            if (server) {
+                System.out.println("Server");
+                ss = new ServerSocket(PORT);
+                s = ss.accept();
+            } else {
+                System.out.println("Client");
+                s = new Socket("127.0.0.1", PORT);
+            }
+        } catch (IOException e) {
+            System.err.println(e.getMessage());
+            return;
+        }
+        DataInputStream is;
+        DataOutputStream os;
+        try {
+            is = new DataInputStream(s.getInputStream());
+            os = new DataOutputStream(s.getOutputStream());
+        } catch (IOException e) {
+            System.out.println(e.getMessage());
+            return;
+        }
+        l = new ApplicationLayer(new ILinkLayer() {
             @Override
             public void receive_byte(byte b) {
 
@@ -106,7 +150,9 @@ public class MainWindow {
 
             @Override
             public synchronized void send_msg(byte[] message) throws IOException {
-                l2.receive_msg(message);
+                os.writeInt(message.length);
+                os.write(message);
+                os.flush();
             }
 
             @Override
@@ -118,32 +164,27 @@ public class MainWindow {
             public void start_lnk() {
 
             }
+        }, arg);
+        new MainWindow(l);
+        l.start_appl();
+        ExecutorService ex = Executors.newFixedThreadPool(1);
+        ex.execute(() -> {
+            try {
+                while (true) {
+                    int length = is.readInt();
+                    byte[] message = new byte[length];
+                    int pos = 0;
+                    while (pos != length) {
+                        int read = is.read(message, pos, length - pos);
+                        if (read == -1) return;
+                        pos += read;
+                    }
+                    l.receive_msg(message);
+                }
+            } catch (IOException e) {
+                System.err.println(e.getMessage());
+            }
         });
-        l2 = new ApplicationLayer(new ILinkLayer() {
-            @Override
-            public void receive_byte(byte b) {
-
-            }
-
-            @Override
-            public synchronized void send_msg(byte[] message) throws IOException {
-                l1.receive_msg(message);
-            }
-
-            @Override
-            public void error_lnk() {
-
-            }
-
-            @Override
-            public void start_lnk() {
-
-            }
-        });
-        new MainWindow(l1);
-        new MainWindow(l2);
-        l1.start_appl();
-        l2.start_appl();
     }
 
     public void showUploadDialog(Message.Hash hash, String name, long size) {

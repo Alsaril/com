@@ -1,4 +1,6 @@
-package com.company.transfer;
+package com.company.transfer.message;
+
+import com.company.transfer.utility.Utility;
 
 import java.nio.ByteBuffer;
 import java.util.Arrays;
@@ -32,6 +34,8 @@ public class Message {
         MessageType type = MessageType.values()[message[Hash.LENGTH]];
         if (type == MessageType.UPLOAD_REQUEST) {
             return new UploadRequestMessage(message);
+        } else if (type == MessageType.UPLOAD_RESPONSE) {
+            return new UploadResponseMessage(message);
         }
         return new Message(message);
     }
@@ -46,15 +50,30 @@ public class Message {
         return bb.array();
     }
 
+    @Override
+    public String toString() {
+        StringBuffer sb = new StringBuffer("M: ");
+        sb.append(hash.toString()).append(", ");
+        sb.append(type.toString()).append(", ");
+        sb.append(block).append(", ");
+        if (data != null) {
+            sb.append(data.length);
+        } else {
+            sb.append(0);
+        }
+        return sb.toString();
+    }
+
     public enum MessageType {
         DATA(0),
         COMPLETE(1),
-        BLOCK_RECEIVE(2),
-        UPLOAD_REQUEST(3),
-        UPLOAD_RESPONSE(4),
-        DOWNLOAD_REQUEST(5),
-        DOWNLOAD_RESPONSE(6),
-        STOP_TRANSFER(7);
+        ERROR(2),
+        BLOCK_RECEIVE(3),
+        UPLOAD_REQUEST(4),
+        UPLOAD_RESPONSE(5),
+        DOWNLOAD_REQUEST(6),
+        DOWNLOAD_RESPONSE(7),
+        STOP_TRANSFER(8);
 
         public final byte id;
 

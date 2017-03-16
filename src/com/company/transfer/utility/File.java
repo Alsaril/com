@@ -1,8 +1,8 @@
-package com.company.transfer;
+package com.company.transfer.utility;
+
+import com.company.transfer.message.Message;
 
 import java.io.*;
-import java.util.HashMap;
-import java.util.Scanner;
 
 public class File {
     public final Message.Hash hash;
@@ -12,41 +12,32 @@ public class File {
     public long date;
     private int block;
     private int showBlock = 0;
+    private FileStatus status = FileStatus.REQUEST;
     private InputStream is = null;
     private OutputStream os = null;
     private boolean error = false;
 
-    public File(Message.Hash hash, String path, String name, long size, int block, long date) {
+    public File(Message.Hash hash, String path, String name, long size, int block, long date, FileStatus status) {
         this.hash = hash;
         this.path = path;
         this.name = name;
         this.size = size;
         this.block = block;
         this.date = date;
+        this.status = status;
+        showBlock = block;
     }
 
     public File(Message.Hash hash, java.io.File file) throws FileNotFoundException {
-        this(hash, file.getAbsolutePath(), file.getName(), file.length(), 0, System.currentTimeMillis());
+        this(hash, file.getAbsolutePath(), file.getName(), file.length(), 0, System.currentTimeMillis(), FileStatus.REQUEST);
     }
 
     public File(java.io.File file) throws FileNotFoundException {
-        this(Utility.fileHash(file), file.getAbsolutePath(), file.getName(), file.length(), 0, System.currentTimeMillis());
+        this(Utility.fileHash(file), file.getAbsolutePath(), file.getName(), file.length(), 0, System.currentTimeMillis(), FileStatus.REQUEST);
     }
 
     public File(String path) throws FileNotFoundException {
         this(new java.io.File(path));
-    }
-
-    public static HashMap<Message.Hash, File> loadFiles(String path) {
-        HashMap<Message.Hash, File> result = new HashMap<>();
-        try (Scanner sc = new Scanner(new BufferedInputStream(new FileInputStream(path)))) {
-            while (sc.hasNext()) {
-                File f = new File(new Message.Hash(sc.nextLine()), sc.nextLine(), sc.nextLine(), sc.nextLong(), sc.nextInt(), sc.nextLong());
-                result.put(f.hash, f);
-            }
-        } catch (IOException e) {
-        }
-        return result;
     }
 
     public InputStream getIs() throws IOException {
@@ -100,5 +91,21 @@ public class File {
 
     public void setError() {
         error = true;
+    }
+
+    public FileStatus getStatus() {
+        return status;
+    }
+
+    public void setStatus(FileStatus status) {
+        this.status = status;
+    }
+
+    public boolean readyToTransfer() {
+        return block - showBlock < 20;
+    }
+
+    public enum FileStatus {
+        REQUEST, TRANSFER, DECLINED, COMPLETE, ERROR
     }
 }

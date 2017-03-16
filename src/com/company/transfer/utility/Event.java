@@ -1,4 +1,6 @@
-package com.company.transfer;
+package com.company.transfer.utility;
+
+import com.company.transfer.message.Message;
 
 public class Event<T> implements Comparable<Event<T>> {
     public final T data;
@@ -26,15 +28,16 @@ public class Event<T> implements Comparable<Event<T>> {
 
     @Override
     public int compareTo(Event<T> e) {
-        if (data instanceof Message && e.data instanceof Message) {
-            Message m1 = (Message) data;
-            Message m2 = (Message) e.data;
-            if (m1.hash.equals(m2.hash)) {
-                return m1.block == m2.block ? -Long.compare(time, e.time) : Integer.compare(m1.block, m2.block);
-            }
+        if (!(data instanceof Message && e.data instanceof Message)) {
+            return -Long.compare(time, e.time);
         }
-        return -Long.compare(time, e.time);
-
+        Message m1 = (Message) data;
+        Message m2 = (Message) e.data;
+        if (m1.hash.equals(m2.hash)) {
+            return m1.block == m2.block ? -Long.compare(time, e.time) : Integer.compare(m1.block, m2.block);
+        } else {
+            return -Long.compare(time, e.time);
+        }
     }
 
 

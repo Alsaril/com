@@ -1,4 +1,6 @@
-package com.company.transfer;
+package com.company.transfer.message;
+
+import com.company.transfer.utility.Utility;
 
 import java.nio.ByteBuffer;
 
