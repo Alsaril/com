@@ -13,7 +13,6 @@ import javax.swing.*;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -24,7 +23,9 @@ import java.util.concurrent.locks.ReentrantLock;
 
 public class ApplicationLayer implements IApplicationLayer {
 
-    private final HashMap<Message.Hash, File> files;
+    private final HashMap<Message.Hash, File> fileMap;
+    private final ArrayList<File> fileList;
+    private final ArrayList<File> stagedFiles = new ArrayList<>();
     private ArrayList<File> uploadFiles = new ArrayList<>();
     private ArrayList<File> downloadFiles = new ArrayList<>();
     private Model model = new Model(this);
@@ -42,7 +43,8 @@ public class ApplicationLayer implements IApplicationLayer {
 
     public ApplicationLayer(ILinkLayer linkLayer, String config) {
         this.linkLayer = linkLayer;
-        files = Utility.getFiles(config);
+        fileMap = Utility.getFiles(config);
+        fileList = new ArrayList<>(fileMap.values());
     }
 
     public void setWindow(MainWindow window) {
@@ -145,11 +147,9 @@ public class ApplicationLayer implements IApplicationLayer {
 
     public void open(java.io.File selectedFile) {
         try {
-            File file = new File(selectedFile);
-            files.put(file.hash, file);
+            File file = new File(selectedFile, this);
+            stagedFiles.add(file);
             model.contentChanged();
-            Message message = new UploadRequestMessage(file.hash, file.name, file.size);
-            addEvent(message, Event.EventType.INNER);
         } catch (FileNotFoundException e) {
 
         }
@@ -157,6 +157,7 @@ public class ApplicationLayer implements IApplicationLayer {
 
     public <T> void addEvent(T data, Event.EventType type) {
         events.add(new Event<>(data, type));
+        model.contentChanged();
         eventLock.lock();
         try {
             eventCondition.signal();
@@ -178,16 +179,18 @@ public class ApplicationLayer implements IApplicationLayer {
     private void processEvent(Event event) {
         if (event.type == Event.EventType.OUTER || event.type == Event.EventType.INNER) {
             Message m = (Message) event.data;
-            File file = files.get(m.hash);
+            File file = fileMap.get(m.hash);
             if (event.type == Event.EventType.INNER) {
-                System.out.println(m.toString());
                 try {
                     linkLayer.send_msg(m.toByte());
+                    if (m.type == Message.MessageType.DATA) {
+                        file.incShowBlock();
+                        model.contentChanged();
+                    }
                 } catch (IOException e) {
                     addEvent(e, Event.EventType.IO);
                 }
-            } else {
-                // next lines are outer only
+            } else { // outer message
                 switch (m.type) {
                     case DATA:
                         if (downloadFiles.contains(file)) {
@@ -196,6 +199,7 @@ public class ApplicationLayer implements IApplicationLayer {
                             }
                             try {
                                 file.getOs().write(m.data);
+                                file.getOs().flush();
                                 Message message = new Message(m.hash, Message.MessageType.BLOCK_RECEIVE, file.getBlock(), null);
                                 addEvent(message, Event.EventType.INNER);
                                 file.incBlock();
@@ -237,10 +241,6 @@ public class ApplicationLayer implements IApplicationLayer {
                         model.contentChanged();
                         break;
                     case BLOCK_RECEIVE:
-                        if (file != null) {
-                            file.incShowBlock();
-                            model.contentChanged();
-                        }
                         break;
                     case UPLOAD_REQUEST:
                         UploadRequestMessage upm = (UploadRequestMessage) m;
@@ -293,7 +293,8 @@ public class ApplicationLayer implements IApplicationLayer {
                 }
                 File file1 = new File(hash, f);
                 file1.setStatus(File.FileStatus.TRANSFER);
-                files.put(file1.hash, file1);
+                fileList.add(file1);
+                fileMap.put(file1.hash, file1);
                 model.contentChanged();
                 downloadFiles.add(file1);
             } catch (IOException e) {
@@ -301,6 +302,19 @@ public class ApplicationLayer implements IApplicationLayer {
             }
         }
         addEvent(new UploadResponseMessage(hash, b), Event.EventType.INNER);
+    }
+
+    public boolean addFile(File file) {
+        boolean result = fileMap.containsKey(file.hash);
+        if (result) {
+            JOptionPane.showMessageDialog(window.getFrame(), "This file has already transferred.");
+        } else {
+            fileMap.put(file.hash, file);
+            fileList.add(file);
+        }
+        stagedFiles.remove(file);
+        model.contentChanged();
+        return result;
     }
 
     private static class Model extends AbstractListModel<File> {
@@ -312,12 +326,15 @@ public class ApplicationLayer implements IApplicationLayer {
 
         @Override
         public int getSize() {
-            return layer.files.size();
+            return layer.fileList.size() + layer.stagedFiles.size();
         }
 
         @Override
         public File getElementAt(int index) {
-            return layer.files.values().stream().sorted(Comparator.comparingLong(f -> f.date)).toArray(File[]::new)[index];
+            if (index < layer.fileList.size()) {
+                return layer.fileList.get(index);
+            }
+            return layer.stagedFiles.get(index - layer.fileList.size());
         }
 
         void contentChanged() {

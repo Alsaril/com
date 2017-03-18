@@ -31,10 +31,10 @@ public class MainWindow {
     private JButton connect;
     private ApplicationLayer applicationLayer;
 
-    public MainWindow(ApplicationLayer applicationLayer) {
+    public MainWindow(ApplicationLayer applicationLayer, String title) {
         this.applicationLayer = applicationLayer;
         applicationLayer.setWindow(this);
-        frame = new JFrame();
+        frame = new JFrame(title);
         JPanel panel = new JPanel();
         open = new JButton("Open");
         close = new JButton("Close");
@@ -165,7 +165,7 @@ public class MainWindow {
 
             }
         }, arg);
-        new MainWindow(l);
+        new MainWindow(l, arg);
         l.start_appl();
         ExecutorService ex = Executors.newFixedThreadPool(1);
         ex.execute(() -> {
@@ -185,6 +185,10 @@ public class MainWindow {
                 System.err.println(e.getMessage());
             }
         });
+    }
+
+    public JFrame getFrame() {
+        return frame;
     }
 
     public void showUploadDialog(Message.Hash hash, String name, long size) {

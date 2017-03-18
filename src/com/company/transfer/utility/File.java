@@ -1,18 +1,23 @@
 package com.company.transfer.utility;
 
+import com.company.transfer.ApplicationLayer;
 import com.company.transfer.message.Message;
+import com.company.transfer.message.UploadRequestMessage;
 
 import java.io.*;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 
 public class File {
-    public final Message.Hash hash;
+    private static final Executor ex = Executors.newFixedThreadPool(1);
     public final String path;
     public final String name;
     public final long size;
+    public Message.Hash hash = null;
     public long date;
     private int block;
     private int showBlock = 0;
-    private FileStatus status = FileStatus.REQUEST;
+    private FileStatus status;
     private InputStream is = null;
     private OutputStream os = null;
     private boolean error = false;
@@ -32,12 +37,17 @@ public class File {
         this(hash, file.getAbsolutePath(), file.getName(), file.length(), 0, System.currentTimeMillis(), FileStatus.REQUEST);
     }
 
-    public File(java.io.File file) throws FileNotFoundException {
-        this(Utility.fileHash(file), file.getAbsolutePath(), file.getName(), file.length(), 0, System.currentTimeMillis(), FileStatus.REQUEST);
-    }
-
-    public File(String path) throws FileNotFoundException {
-        this(new java.io.File(path));
+    public File(java.io.File file, ApplicationLayer layer) throws FileNotFoundException {
+        this(null, file.getAbsolutePath(), file.getName(), file.length(), 0, System.currentTimeMillis(), FileStatus.HASHING);
+        ex.execute(() -> {
+            hash = Utility.fileHash(file);
+            setStatus(FileStatus.REQUEST);
+            boolean copy = layer.addFile(this);
+            if (!copy) {
+                Message message = new UploadRequestMessage(hash, name, size);
+                layer.addEvent(message, Event.EventType.INNER);
+            }
+        });
     }
 
     public InputStream getIs() throws IOException {
@@ -106,6 +116,6 @@ public class File {
     }
 
     public enum FileStatus {
-        REQUEST, TRANSFER, DECLINED, COMPLETE, ERROR
+        REQUEST, TRANSFER, DECLINED, COMPLETE, ERROR, HASHING
     }
 }

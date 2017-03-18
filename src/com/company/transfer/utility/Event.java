@@ -2,6 +2,8 @@ package com.company.transfer.utility;
 
 import com.company.transfer.message.Message;
 
+import static com.company.transfer.utility.Event.EventType.IO;
+
 public class Event<T> implements Comparable<Event<T>> {
     public final T data;
     public final EventType type;
@@ -26,18 +28,32 @@ public class Event<T> implements Comparable<Event<T>> {
         return false;
     }
 
+    public int priority() {
+        if (type == IO || type == EventType.NOT_FOUND) {
+            return 3;
+        }
+        Message m = (Message) data;
+        if (m.type == Message.MessageType.BLOCK_RECEIVE) {
+            return 2;
+        }
+        if (m.type == Message.MessageType.UPLOAD_REQUEST ||
+                m.type == Message.MessageType.UPLOAD_RESPONSE ||
+                m.type == Message.MessageType.DOWNLOAD_REQUEST ||
+                m.type == Message.MessageType.DOWNLOAD_RESPONSE) {
+            return 1;
+        }
+        return 0;
+    }
+
     @Override
     public int compareTo(Event<T> e) {
-        if (!(data instanceof Message && e.data instanceof Message)) {
-            return -Long.compare(time, e.time);
+        if (priority() != e.priority()) {
+            return Integer.compare(priority(), e.priority());
         }
-        Message m1 = (Message) data;
-        Message m2 = (Message) e.data;
-        if (m1.hash.equals(m2.hash)) {
-            return m1.block == m2.block ? -Long.compare(time, e.time) : Integer.compare(m1.block, m2.block);
-        } else {
-            return -Long.compare(time, e.time);
+        if (e.data instanceof Message && data instanceof Message) {
+            return -Integer.compare(((Message) e.data).block, ((Message) data).block);
         }
+        return Long.compare(time, e.time);
     }
 
 
