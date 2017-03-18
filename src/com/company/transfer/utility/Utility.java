@@ -1,7 +1,8 @@
 package com.company.transfer.utility;
 
-import com.company.transfer.message.Message;
+import com.company.transfer.MainWindow;
 
+import javax.swing.*;
 import java.io.*;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -10,17 +11,17 @@ import java.util.HashMap;
 public class Utility {
     public static final int BLOCK_SIZE = 1024 * 4;
     private static final char[] hexArray = "0123456789ABCDEF".toCharArray();
-    private static final HashMap<Message.Hash, File> files = new HashMap<>();
+    private static final HashMap<Hash, File> files = new HashMap<>();
     public static String rootPath = "";
     private static String configPath;
 
-    public static HashMap<Message.Hash, File> getFiles(String config) {
+    public static HashMap<Hash, File> getFiles(String config) {
         configPath = config;
         try (DataInputStream dis = new DataInputStream(new BufferedInputStream(new FileInputStream(configPath)))) {
             rootPath = dis.readUTF();
             int length = dis.readInt();
             for (int i = 0; i < length; i++) {
-                File f = new File(new Message.Hash(dis.readUTF()),
+                File f = new File(new Hash(dis.readUTF()),
                         dis.readUTF(),
                         dis.readUTF(),
                         dis.readLong(),
@@ -72,7 +73,7 @@ public class Utility {
         return data;
     }
 
-    public static Message.Hash fileHash(java.io.File file) {
+    public static Hash fileHash(java.io.File file) {
         MessageDigest md;
         try {
             md = MessageDigest.getInstance("MD5");
@@ -89,11 +90,15 @@ public class Utility {
         } catch (IOException e) {
             return null;
         }
-        return new Message.Hash(md.digest());
+        return new Hash(md.digest());
     }
 
     public static String trimZeros(String str) {
         int pos = str.indexOf(0);
         return pos == -1 ? str : str.substring(0, pos);
+    }
+
+    public static void showError(String s, MainWindow window) {
+        JOptionPane.showMessageDialog(window.getFrame(), s);
     }
 }

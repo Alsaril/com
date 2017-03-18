@@ -1,8 +1,8 @@
 package com.company.transfer;
 
 import com.company.transfer.interfaces.ILinkLayer;
-import com.company.transfer.message.Message;
 import com.company.transfer.utility.File;
+import com.company.transfer.utility.Hash;
 import com.company.transfer.utility.Utility;
 
 import javax.swing.*;
@@ -15,6 +15,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -75,8 +76,13 @@ public class MainWindow {
             JLabel name = new JLabel(file.path);
             int progress = file.getProgress();
             JProgressBar progressBar = new JProgressBar(0, 100);
-            progressBar.setValue(progress);
             progressBar.setStringPainted(true);
+            if (file.getStatus() == File.FileStatus.HASHING) {
+                progressBar.setString("Hashing...");
+            } else {
+                progressBar.setValue(progress);
+                progressBar.setString(null);
+            }
             JLabel hash = new JLabel(file.hash + " (" + file.getStatus().toString() + ")");
             elemPanel.add(name, BorderLayout.NORTH);
             elemPanel.add(progressBar, BorderLayout.CENTER);
@@ -110,12 +116,7 @@ public class MainWindow {
         }
         boolean server = arg.equals("server");
         try {
-            for (UIManager.LookAndFeelInfo info : UIManager.getInstalledLookAndFeels()) {
-                if ("Windows".equals(info.getName())) {
-                    UIManager.setLookAndFeel(info.getClassName());
-                    break;
-                }
-            }
+            UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
         } catch (Exception e) {
         }
         Socket s;
@@ -170,16 +171,16 @@ public class MainWindow {
         ExecutorService ex = Executors.newFixedThreadPool(1);
         ex.execute(() -> {
             try {
+                byte[] message = new byte[Utility.BLOCK_SIZE * 2];
                 while (true) {
                     int length = is.readInt();
-                    byte[] message = new byte[length];
                     int pos = 0;
                     while (pos != length) {
                         int read = is.read(message, pos, length - pos);
                         if (read == -1) return;
                         pos += read;
                     }
-                    l.receive_msg(message);
+                    l.receive_msg(message, length);
                 }
             } catch (IOException e) {
                 System.err.println(e.getMessage());
@@ -191,18 +192,26 @@ public class MainWindow {
         return frame;
     }
 
-    public void showUploadDialog(Message.Hash hash, String name, long size) {
+    public void showUploadDialog(Hash hash, String name, long size) {
         SwingUtilities.invokeLater(() -> {
+            String[] names = {"B", "KB", "MB", "GB"};
+            long _size = size;
+            int index = 0;
+            while (_size >= 1024) {
+                _size >>>= 10;
+                index++;
+            }
             final JOptionPane optionPane = new JOptionPane(
                     "Загрузить файл\n"
                             + name + "\n"
-                            + "Размер: " + size + " байт?",
+                            + String.format(Locale.US, "Размер: %d %s", _size, names[index]),
                     JOptionPane.QUESTION_MESSAGE,
                     JOptionPane.YES_NO_OPTION);
 
             final JDialog dialog = new JDialog(frame,
                     "Click a button",
                     true);
+
             dialog.setContentPane(optionPane);
             dialog.setDefaultCloseOperation(
                     JDialog.DO_NOTHING_ON_CLOSE);
@@ -216,13 +225,14 @@ public class MainWindow {
                         }
                     });
             dialog.pack();
+            dialog.setLocationRelativeTo(frame);
             dialog.setVisible(true);
 
             int value = (Integer) optionPane.getValue();
             if (value == JOptionPane.YES_OPTION) {
-                applicationLayer.accept(hash, name, true);
+                applicationLayer.accept(hash, name, size, true);
             } else if (value == JOptionPane.NO_OPTION) {
-                applicationLayer.accept(hash, name, false);
+                applicationLayer.accept(hash, name, size, false);
             }
         });
     }

@@ -13,16 +13,15 @@ public class File {
     public final String path;
     public final String name;
     public final long size;
-    public Message.Hash hash = null;
-    public long date;
+    public final long date;
+    public Hash hash = null;
     private int block;
-    private int showBlock = 0;
     private FileStatus status;
     private InputStream is = null;
     private OutputStream os = null;
     private boolean error = false;
 
-    public File(Message.Hash hash, String path, String name, long size, int block, long date, FileStatus status) {
+    public File(Hash hash, String path, String name, long size, int block, long date, FileStatus status) {
         this.hash = hash;
         this.path = path;
         this.name = name;
@@ -30,24 +29,25 @@ public class File {
         this.block = block;
         this.date = date;
         this.status = status;
-        showBlock = block;
     }
 
-    public File(Message.Hash hash, java.io.File file) throws FileNotFoundException {
-        this(hash, file.getAbsolutePath(), file.getName(), file.length(), 0, System.currentTimeMillis(), FileStatus.REQUEST);
+    public File(Hash hash, java.io.File file, long size) throws FileNotFoundException {
+        this(hash, file.getAbsolutePath(), file.getName(), size, 0, System.currentTimeMillis(), FileStatus.REQUEST);
     }
 
     public File(java.io.File file, ApplicationLayer layer) throws FileNotFoundException {
         this(null, file.getAbsolutePath(), file.getName(), file.length(), 0, System.currentTimeMillis(), FileStatus.HASHING);
-        ex.execute(() -> {
-            hash = Utility.fileHash(file);
-            setStatus(FileStatus.REQUEST);
-            boolean copy = layer.addFile(this);
-            if (!copy) {
-                Message message = new UploadRequestMessage(hash, name, size);
-                layer.addEvent(message, Event.EventType.INNER);
-            }
-        });
+        if (size != 0) {
+            ex.execute(() -> {
+                hash = Utility.fileHash(file);
+                setStatus(FileStatus.REQUEST);
+                boolean copy = layer.addFile(this);
+                if (!copy) {
+                    Message message = new UploadRequestMessage(hash, name, size);
+                    layer.addEvent(message, Event.EventType.INNER);
+                }
+            });
+        }
     }
 
     public InputStream getIs() throws IOException {
@@ -82,12 +82,8 @@ public class File {
         block++;
     }
 
-    public void incShowBlock() {
-        showBlock++;
-    }
-
     public int getProgress() {
-        return (int) (100.0 * showBlock * Utility.BLOCK_SIZE / size);
+        return (int) (100.0 * block * Utility.BLOCK_SIZE / size);
     }
 
     public boolean isError() {
@@ -112,7 +108,7 @@ public class File {
     }
 
     public boolean readyToTransfer() {
-        return block - showBlock < 20;
+        return true;
     }
 
     public enum FileStatus {

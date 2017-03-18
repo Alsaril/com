@@ -33,16 +33,13 @@ public class Event<T> implements Comparable<Event<T>> {
             return 3;
         }
         Message m = (Message) data;
-        if (m.type == Message.MessageType.BLOCK_RECEIVE) {
-            return 2;
-        }
         if (m.type == Message.MessageType.UPLOAD_REQUEST ||
                 m.type == Message.MessageType.UPLOAD_RESPONSE ||
                 m.type == Message.MessageType.DOWNLOAD_REQUEST ||
                 m.type == Message.MessageType.DOWNLOAD_RESPONSE) {
-            return 1;
+            return 2;
         }
-        return 0;
+        return 1;
     }
 
     @Override

@@ -1,5 +1,7 @@
 package com.company.transfer.message;
 
+import com.company.transfer.utility.Hash;
+
 public class UploadResponseMessage extends Message {
 
     public final boolean accept;
@@ -9,8 +11,8 @@ public class UploadResponseMessage extends Message {
         this.accept = accept;
     }
 
-    public UploadResponseMessage(byte[] message) {
-        super(message);
+    public UploadResponseMessage(byte[] message, int length) {
+        super(message, length);
         accept = data[0] > 0;
     }
 }

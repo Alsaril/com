@@ -16,7 +16,7 @@ public class Stack implements IPhysicalLayer, ILinkLayer, IApplicationLayer {
     }
 
     @Override
-    public void receive_msg(byte[] message) {
+    public void receive_msg(byte[] message, int length) {
 
     }
 

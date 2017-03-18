@@ -1,9 +1,8 @@
 package com.company.transfer.message;
 
-import com.company.transfer.utility.Utility;
+import com.company.transfer.utility.Hash;
 
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 
 public class Message {
 
@@ -19,31 +18,31 @@ public class Message {
         this.data = data;
     }
 
-    protected Message(byte[] message) {
+    protected Message(byte[] message, int length) {
         ByteBuffer bb = ByteBuffer.wrap(message);
         byte[] hashBytes = new byte[Hash.LENGTH];
         bb.get(hashBytes);
         hash = new Hash(hashBytes);
         type = MessageType.values()[bb.get()];
         block = bb.getInt();
-        data = new byte[bb.remaining()];
+        data = new byte[length - bb.position()];
         bb.get(data);
     }
 
-    public static Message parse(byte[] message) {
+    public static Message parse(byte[] message, int length) {
         MessageType type = MessageType.values()[message[Hash.LENGTH]];
         if (type == MessageType.UPLOAD_REQUEST) {
-            return new UploadRequestMessage(message);
+            return new UploadRequestMessage(message, length);
         } else if (type == MessageType.UPLOAD_RESPONSE) {
-            return new UploadResponseMessage(message);
+            return new UploadResponseMessage(message, length);
         }
-        return new Message(message);
+        return new Message(message, length);
     }
 
     public byte[] toByte() {
         int length = Hash.LENGTH + Byte.BYTES + Integer.BYTES + (data == null ? 0 : data.length);
         ByteBuffer bb = ByteBuffer.allocate(length);
-        bb.put(hash.value()).put(type.id).putInt(block);
+        bb.put(hash.value()).put((byte) type.ordinal()).putInt(block);
         if (data != null) {
             bb.put(data);
         }
@@ -52,7 +51,7 @@ public class Message {
 
     @Override
     public String toString() {
-        StringBuffer sb = new StringBuffer("M: ");
+        StringBuilder sb = new StringBuilder("M: ");
         sb.append(hash.toString()).append(", ");
         sb.append(type.toString()).append(", ");
         sb.append(block).append(", ");
@@ -65,58 +64,13 @@ public class Message {
     }
 
     public enum MessageType {
-        DATA(0),
-        COMPLETE(1),
-        ERROR(2),
-        BLOCK_RECEIVE(3),
-        UPLOAD_REQUEST(4),
-        UPLOAD_RESPONSE(5),
-        DOWNLOAD_REQUEST(6),
-        DOWNLOAD_RESPONSE(7),
-        STOP_TRANSFER(8);
-
-        public final byte id;
-
-        MessageType(int id) {
-            this.id = (byte) id;
-        }
+        DATA,
+        COMPLETE,
+        ERROR,
+        UPLOAD_REQUEST,
+        UPLOAD_RESPONSE,
+        DOWNLOAD_REQUEST,
+        DOWNLOAD_RESPONSE,
+        STOP_TRANSFER
     }
-
-    public static class Hash {
-        public static final int LENGTH = 16;
-        private final byte[] value;
-
-        public Hash(byte[] value) {
-            assert value.length == LENGTH;
-            this.value = value;
-        }
-
-        public Hash(String str) {
-            assert str.length() == LENGTH * Character.BYTES;
-            this.value = Utility.hexToBytes(str);
-        }
-
-        public byte[] value() {
-            return value;
-        }
-
-        @Override
-        public String toString() {
-            return Utility.bytesToHex(value);
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            return (obj instanceof Hash) && Arrays.equals(((Hash) obj).value, value);
-        }
-
-        @Override
-        public int hashCode() {
-            return ((value[0] ^ value[4] ^ value[8] ^ value[12]) << 3) +
-                    ((value[1] ^ value[5] ^ value[9] ^ value[13]) << 2) +
-                    ((value[2] ^ value[6] ^ value[10] ^ value[14]) << 1) +
-                    (value[3] ^ value[7] ^ value[11] ^ value[15]);
-        }
-    }
-
 }

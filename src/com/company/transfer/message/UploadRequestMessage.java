@@ -1,5 +1,6 @@
 package com.company.transfer.message;
 
+import com.company.transfer.utility.Hash;
 import com.company.transfer.utility.Utility;
 
 import java.nio.ByteBuffer;
@@ -10,9 +11,7 @@ public class UploadRequestMessage extends Message {
     public final long size;
 
     public UploadRequestMessage(Hash hash, String name, long size) {
-        super(hash,
-                MessageType.UPLOAD_REQUEST,
-                0,
+        super(hash, MessageType.UPLOAD_REQUEST, 0,
                 ByteBuffer.allocate(Long.BYTES + name.length() * Character.BYTES)
                         .putLong(size)
                         .put(name.getBytes())
@@ -21,8 +20,8 @@ public class UploadRequestMessage extends Message {
         this.size = size;
     }
 
-    public UploadRequestMessage(byte[] message) {
-        super(message);
+    public UploadRequestMessage(byte[] message, int length) {
+        super(message, length);
         ByteBuffer bb = ByteBuffer.wrap(data);
         size = bb.getLong();
         byte[] bytes = new byte[bb.remaining()];
