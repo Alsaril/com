@@ -15,7 +15,6 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -25,12 +24,13 @@ public class MainWindow {
     static ApplicationLayer l = null;
     private JFrame frame;
     private JButton open;
-    private JButton close;
+    private JButton delete;
     private JButton start;
     private JButton stop;
     private JButton settings;
     private JButton connect;
     private ApplicationLayer applicationLayer;
+    private File selected = null;
 
     public MainWindow(ApplicationLayer applicationLayer, String title) {
         this.applicationLayer = applicationLayer;
@@ -38,13 +38,16 @@ public class MainWindow {
         frame = new JFrame(title);
         JPanel panel = new JPanel();
         open = new JButton("Open");
-        close = new JButton("Close");
+        delete = new JButton("Delete");
         start = new JButton("Start");
         stop = new JButton("Stop");
         settings = new JButton("Settings");
         connect = new JButton("Connect");
+        delete.setEnabled(false);
+        start.setEnabled(false);
+        stop.setEnabled(false);
         panel.add(open);
-        panel.add(close);
+        panel.add(delete);
         panel.add(start);
         panel.add(stop);
         panel.add(settings);
@@ -59,6 +62,7 @@ public class MainWindow {
                 }
             }
         });
+
         frame.add(panel, BorderLayout.NORTH);
         frame.addWindowListener(new WindowAdapter() {
                                     @Override
@@ -73,12 +77,13 @@ public class MainWindow {
         list.setCellRenderer((list1, file, index, isSelected, cellHasFocus) -> {
             JPanel elemPanel = new JPanel();
             elemPanel.setLayout(new BorderLayout());
-            JLabel name = new JLabel(file.path);
+            JLabel name = new JLabel(file.name);
             int progress = file.getProgress();
             JProgressBar progressBar = new JProgressBar(0, 100);
             progressBar.setStringPainted(true);
             if (file.getStatus() == File.FileStatus.HASHING) {
-                progressBar.setString("Hashing...");
+                progressBar.setValue(progress);
+                progressBar.setString(String.format("Hashing (%d%%)", progress));
             } else {
                 progressBar.setValue(progress);
                 progressBar.setString(null);
@@ -96,6 +101,56 @@ public class MainWindow {
                 elemPanel.setBackground(new Color(197, 225, 245));
             }
             return elemPanel;
+        });
+        list.addListSelectionListener(e -> {
+            selected = list.getSelectedValue();
+            if (selected == null) return;
+            delete.setEnabled(true);
+            switch (selected.getStatus()) {
+                case REQUEST:
+                    start.setEnabled(false);
+                    stop.setEnabled(false);
+                    break;
+                case TRANSFER:
+                    start.setEnabled(false);
+                    stop.setEnabled(true);
+                    break;
+                case DECLINED:
+                    start.setEnabled(true);
+                    stop.setEnabled(false);
+                    break;
+                case COMPLETE:
+                    start.setEnabled(false);
+                    stop.setEnabled(false);
+                    break;
+                case PAUSE:
+                    start.setEnabled(true);
+                    stop.setEnabled(false);
+                    break;
+                case HASHING:
+                    start.setEnabled(false);
+                    start.setEnabled(false);
+                    break;
+            }
+        });
+
+        delete.addActionListener(e -> {
+            applicationLayer.delete(selected);
+            list.clearSelection();
+            selected = null;
+            delete.setEnabled(false);
+        });
+        start.addActionListener(e -> {
+            applicationLayer.start(selected);
+            int i = list.getSelectedIndex();
+            list.clearSelection();
+            list.setSelectedIndex(i);
+        });
+        stop.addActionListener(e -> {
+            applicationLayer.stop(selected);
+            int i = list.getSelectedIndex();
+            list.clearSelection();
+            list.setSelectedIndex(i);
         });
         frame.add(new JScrollPane(list), BorderLayout.CENTER);
         frame.setPreferredSize(new Dimension(600, 400));
@@ -192,7 +247,7 @@ public class MainWindow {
         return frame;
     }
 
-    public void showUploadDialog(Hash hash, String name, long size) {
+    public void showUploadDialog(Hash hash, String name, long size, boolean second) {
         SwingUtilities.invokeLater(() -> {
             String[] names = {"B", "KB", "MB", "GB"};
             long _size = size;
@@ -201,16 +256,11 @@ public class MainWindow {
                 _size >>>= 10;
                 index++;
             }
-            final JOptionPane optionPane = new JOptionPane(
-                    "Загрузить файл\n"
-                            + name + "\n"
-                            + String.format(Locale.US, "Размер: %d %s", _size, names[index]),
-                    JOptionPane.QUESTION_MESSAGE,
-                    JOptionPane.YES_NO_OPTION);
+            String text = second ? String.format("Продолжить загрузку файла \"%s\"?", name) :
+                    String.format("Загрузить файл \"%s\"?\n Размер: %d %s", name, _size, names[index]);
+            final JOptionPane optionPane = new JOptionPane(text, JOptionPane.QUESTION_MESSAGE, JOptionPane.YES_NO_OPTION);
 
-            final JDialog dialog = new JDialog(frame,
-                    "Click a button",
-                    true);
+            final JDialog dialog = new JDialog(frame, "Click a button", true);
 
             dialog.setContentPane(optionPane);
             dialog.setDefaultCloseOperation(
@@ -229,11 +279,8 @@ public class MainWindow {
             dialog.setVisible(true);
 
             int value = (Integer) optionPane.getValue();
-            if (value == JOptionPane.YES_OPTION) {
-                applicationLayer.accept(hash, name, size, true);
-            } else if (value == JOptionPane.NO_OPTION) {
-                applicationLayer.accept(hash, name, size, false);
-            }
+            applicationLayer.accept(hash, name, size, value == JOptionPane.YES_OPTION, second);
+
         });
     }
 }

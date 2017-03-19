@@ -14,6 +14,7 @@ public class File {
     public final String name;
     public final long size;
     public final long date;
+    public final Location location;
     public Hash hash = null;
     private int block;
     private FileStatus status;
@@ -21,26 +22,28 @@ public class File {
     private OutputStream os = null;
     private boolean error = false;
 
-    public File(Hash hash, String path, String name, long size, int block, long date, FileStatus status) {
+    public File(Hash hash, String path, String name, long size, long date, Location location, int block, FileStatus status) {
         this.hash = hash;
         this.path = path;
         this.name = name;
         this.size = size;
-        this.block = block;
         this.date = date;
+        this.location = location;
+        this.block = block;
         this.status = status;
     }
 
     public File(Hash hash, java.io.File file, long size) throws FileNotFoundException {
-        this(hash, file.getAbsolutePath(), file.getName(), size, 0, System.currentTimeMillis(), FileStatus.REQUEST);
+        this(hash, file.getAbsolutePath(), file.getName(), size, System.currentTimeMillis(), Location.REMOTE, 0, FileStatus.REQUEST);
     }
 
     public File(java.io.File file, ApplicationLayer layer) throws FileNotFoundException {
-        this(null, file.getAbsolutePath(), file.getName(), file.length(), 0, System.currentTimeMillis(), FileStatus.HASHING);
+        this(null, file.getAbsolutePath(), file.getName(), file.length(), System.currentTimeMillis(), Location.LOCAL, 0, FileStatus.HASHING);
         if (size != 0) {
             ex.execute(() -> {
-                hash = Utility.fileHash(file);
+                hash = Utility.fileHash(file, value -> block = (int) (size * value / Utility.BLOCK_SIZE));
                 setStatus(FileStatus.REQUEST);
+                block = 0;
                 boolean copy = layer.addFile(this);
                 if (!copy) {
                     Message message = new UploadRequestMessage(hash, name, size);
@@ -50,28 +53,72 @@ public class File {
         }
     }
 
-    public InputStream getIs() throws IOException {
+    private void initInputStream() {
+        assert location == Location.LOCAL;
         if (is == null) {
             try {
-                is = new FileInputStream(path);
+                is = new BufferedInputStream(new FileInputStream(path));
             } catch (IOException e) {
                 error = true;
-                throw e;
             }
         }
-        return is;
     }
 
-    public OutputStream getOs() throws IOException {
+    private void initOutputStream() {
+        assert location == Location.REMOTE;
         if (os == null) {
             try {
-                os = new FileOutputStream(path);
+                os = new BufferedOutputStream(new FileOutputStream(path));
             } catch (IOException e) {
                 error = true;
-                throw e;
             }
         }
-        return os;
+    }
+
+    public void write(byte[] data) throws IOException {
+        initOutputStream();
+        if (os != null) {
+            os.write(data);
+        }
+    }
+
+    public int read(byte[] buffer) throws IOException {
+        initInputStream();
+        if (is != null) {
+            return is.read(buffer);
+        }
+        throw new IOException();
+    }
+
+    public void close() throws IOException {
+        if (os != null) {
+            os.flush();
+            os.close();
+        }
+    }
+
+    public void resetInputStream(int block) {
+        try {
+            if (is != null) {
+                is.close();
+            }
+            initInputStream();
+            is.skip(block * Utility.BLOCK_SIZE);
+        } catch (IOException e) {
+            error = true;
+        }
+    }
+
+    public void resetOutputStream() {
+        try {
+            if (os != null) {
+                os.flush();
+                os.close();
+            }
+            os = new BufferedOutputStream(new FileOutputStream(path, true));
+        } catch (IOException e) {
+            error = true;
+        }
     }
 
     public int getBlock() {
@@ -92,7 +139,7 @@ public class File {
 
     @Override
     public boolean equals(Object obj) {
-        return obj instanceof File && ((File) obj).hash.equals(hash);
+        return obj instanceof File && ((File) obj).hash.equals(hash) || obj == this;
     }
 
     public void setError() {
@@ -112,6 +159,10 @@ public class File {
     }
 
     public enum FileStatus {
-        REQUEST, TRANSFER, DECLINED, COMPLETE, ERROR, HASHING
+        HASHING, REQUEST, TRANSFER, DECLINED, COMPLETE, PAUSE
+    }
+
+    public enum Location {
+        LOCAL, REMOTE
     }
 }

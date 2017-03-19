@@ -108,7 +108,7 @@ public class ApplicationLayer implements IApplicationLayer {
                         int read;
                         buffer = new byte[Utility.BLOCK_SIZE];
                         try {
-                            read = file.getIs().read(buffer);
+                            read = file.read(buffer);
                         } catch (IOException e) {
                             addEvent(file, Event.EventType.NOT_FOUND);
                             continue;
@@ -191,7 +191,7 @@ public class ApplicationLayer implements IApplicationLayer {
                 } catch (IOException e) {
                     addEvent(e, Event.EventType.IO);
                 }
-            } else { // outer message
+            } else { // outer messages
                 switch (m.type) {
                     case DATA:
                         if (downloadFiles.contains(file)) {
@@ -199,8 +199,7 @@ public class ApplicationLayer implements IApplicationLayer {
                                 addEvent(new IOException("Block number conflict: " + m.block + " , " + file.getBlock()), Event.EventType.IO);
                             }
                             try {
-                                file.getOs().write(m.data);
-                                file.getOs().flush();
+                                file.write(m.data);
                                 file.incBlock();
                             } catch (IOException e) {
                                 addEvent(e, Event.EventType.IO);
@@ -208,36 +207,42 @@ public class ApplicationLayer implements IApplicationLayer {
                         }
                         break;
                     case COMPLETE:
-                        if (uploadFiles.contains(file)) {
-                            file.setStatus(File.FileStatus.COMPLETE);
-                            uploadFiles.remove(file);
-                        } else if (downloadFiles.contains(file)) {
+                        uploadLock.lock();
+                        try {
+                            if (uploadFiles.contains(file)) {
+                                file.setStatus(File.FileStatus.COMPLETE);
+                                uploadFiles.remove(file);
+                                Utility.showError("Success.", window);
+                            }
+                        } finally {
+                            uploadLock.unlock();
+                        }
+                        if (downloadFiles.contains(file)) {
                             try {
-                                file.getOs().flush();
-                                file.getOs().close();
+                                file.close();
                             } catch (IOException e) {
                                 addEvent(e, Event.EventType.IO);
                             }
-                            System.gc();
-                            if (file.hash.equals(Utility.fileHash(new java.io.File(file.path)))) {
-                                // TODO show complete
+                            if (file.hash.equals(Utility.fileHash(new java.io.File(file.path), null))) {
+                                Utility.showError("Success.", window);
                                 file.setStatus(File.FileStatus.COMPLETE);
                                 addEvent(new Message(m.hash, Message.MessageType.COMPLETE, file.getBlock(), null), Event.EventType.INNER);
                                 System.out.println("Success");
                             } else {
-                                // TODO show error
-                                file.setStatus(File.FileStatus.ERROR);
+                                Utility.showError("Error.", window);
+                                file.setStatus(File.FileStatus.PAUSE);
                                 addEvent(new Message(m.hash, Message.MessageType.ERROR, file.getBlock(), null), Event.EventType.INNER);
                                 System.out.println("Error");
                             }
                         }
+                        System.gc();
                         break;
                     case ERROR:
-                        file.setStatus(File.FileStatus.ERROR);
+                        file.setStatus(File.FileStatus.PAUSE);
                         break;
                     case UPLOAD_REQUEST:
                         UploadRequestMessage upm = (UploadRequestMessage) m;
-                        window.showUploadDialog(upm.hash, upm.name, upm.size);
+                        window.showUploadDialog(upm.hash, upm.name, upm.size, fileMap.containsKey(upm.hash));
                         break;
                     case UPLOAD_RESPONSE:
                         UploadResponseMessage upm1 = (UploadResponseMessage) m;
@@ -245,6 +250,7 @@ public class ApplicationLayer implements IApplicationLayer {
                             uploadLock.lock();
                             try {
                                 file.setStatus(File.FileStatus.TRANSFER);
+                                file.resetInputStream(upm1.block);
                                 uploadFiles.add(file);
                                 uploadCondition.signal();
                             } finally {
@@ -259,6 +265,24 @@ public class ApplicationLayer implements IApplicationLayer {
                     case DOWNLOAD_RESPONSE:
                         break;
                     case STOP_TRANSFER:
+                        uploadLock.lock();
+                        try {
+                            if (uploadFiles.contains(file)) {
+                                file.setStatus(File.FileStatus.PAUSE);
+                                uploadFiles.remove(file);
+                            }
+                        } finally {
+                            uploadLock.unlock();
+                        }
+                        if (downloadFiles.contains(file)) {
+                            file.setStatus(File.FileStatus.PAUSE);
+                            try {
+                                file.close();
+                            } catch (IOException e) {
+                                e.printStackTrace();
+                            }
+                            downloadFiles.remove(file);
+                        }
                         break;
                 }
             }
@@ -276,23 +300,31 @@ public class ApplicationLayer implements IApplicationLayer {
         return model;
     }
 
-    public void accept(Hash hash, String name, long size, boolean b) {
+    public void accept(Hash hash, String name, long size, boolean b, boolean second) {
+        File file;
         if (b) {
-            try {
-                java.io.File f = new java.io.File(name);
-                if (!f.exists()) {
-                    f.createNewFile();
+            if (!second) {
+                try {
+                    java.io.File f = new java.io.File(name);
+                    if (!f.exists()) {
+                        f.createNewFile();
+                    }
+                    file = new File(hash, f, size);
+                } catch (IOException e) {
+                    System.err.println();
+                    return;
                 }
-                File file1 = new File(hash, f, size);
-                file1.setStatus(File.FileStatus.TRANSFER);
-                fileList.add(file1);
-                fileMap.put(file1.hash, file1);
-                downloadFiles.add(file1);
-            } catch (IOException e) {
-                System.err.println();
+                fileList.add(file);
+                fileMap.put(file.hash, file);
+            } else {
+                file = fileMap.get(hash);
             }
+            file.setStatus(File.FileStatus.TRANSFER);
+            downloadFiles.add(file);
+            addEvent(new UploadResponseMessage(hash, file.getBlock(), true), Event.EventType.INNER);
+            return;
         }
-        addEvent(new UploadResponseMessage(hash, b), Event.EventType.INNER);
+        addEvent(new UploadResponseMessage(hash, false), Event.EventType.INNER);
     }
 
     public boolean addFile(File file) {
@@ -307,6 +339,50 @@ public class ApplicationLayer implements IApplicationLayer {
         return result;
     }
 
+    public void delete(File selected) {
+        if (selected == null) return;
+        stop(selected);
+        fileList.remove(selected);
+        fileMap.remove(selected.hash);
+    }
+
+    public void stop(File selected) {
+        if (selected == null) return;
+        uploadLock.lock();
+        try {
+            if (uploadFiles.contains(selected)) {
+                Message message = new Message(selected.hash, Message.MessageType.STOP_TRANSFER, 0, null);
+                addEvent(message, Event.EventType.INNER);
+                uploadFiles.remove(selected);
+            }
+        } finally {
+            uploadLock.unlock();
+        }
+        if (downloadFiles.contains(selected)) {
+            Message message = new Message(selected.hash, Message.MessageType.STOP_TRANSFER, 0, null);
+            addEvent(message, Event.EventType.INNER);
+            downloadFiles.remove(selected);
+        }
+        selected.setStatus(File.FileStatus.PAUSE);
+    }
+
+    public void start(File selected) {
+        if (selected == null) return;
+        if (selected.location == File.Location.LOCAL) {
+            uploadLock.lock();
+            try {
+                Message message = new UploadRequestMessage(selected.hash, selected.name, selected.size);
+                addEvent(message, Event.EventType.INNER);
+            } finally {
+                uploadLock.unlock();
+            }
+        } else {
+            assert 1 == 2;
+            Message message = new Message(selected.hash, Message.MessageType.DOWNLOAD_REQUEST, selected.getBlock(), null);
+            addEvent(message, Event.EventType.INNER);
+        }
+    }
+
     private static class Model extends AbstractListModel<File> {
         private final ApplicationLayer layer;
 
@@ -316,7 +392,7 @@ public class ApplicationLayer implements IApplicationLayer {
                 try {
                     while (true) {
                         fireContentsChanged(this, 0, getSize());
-                        Thread.sleep(1000);
+                        Thread.sleep(500);
                     }
                 } catch (InterruptedException e) {
 

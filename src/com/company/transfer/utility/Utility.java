@@ -25,8 +25,9 @@ public class Utility {
                         dis.readUTF(),
                         dis.readUTF(),
                         dis.readLong(),
-                        dis.readInt(),
                         dis.readLong(),
+                        File.Location.values()[dis.readInt()],
+                        dis.readInt(),
                         File.FileStatus.values()[dis.readInt()]);
                 files.put(f.hash, f);
             }
@@ -73,19 +74,25 @@ public class Utility {
         return data;
     }
 
-    public static Hash fileHash(java.io.File file) {
+    public static Hash fileHash(java.io.File file, ProgressListener l) {
         MessageDigest md;
         try {
             md = MessageDigest.getInstance("MD5");
         } catch (NoSuchAlgorithmException e) {
             return null;
         }
+        long length = file.length();
+        long pos = 0;
         try (InputStream is = new BufferedInputStream(new FileInputStream(file))) {
             byte[] buffer = new byte[BLOCK_SIZE];
             while (true) {
                 int read = is.read(buffer);
                 if (read == -1) break;
                 md.update(buffer, 0, read);
+                pos += read;
+                if (l != null) {
+                    l.progress((double) pos / length);
+                }
             }
         } catch (IOException e) {
             return null;

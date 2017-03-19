@@ -7,7 +7,11 @@ public class UploadResponseMessage extends Message {
     public final boolean accept;
 
     public UploadResponseMessage(Hash hash, boolean accept) {
-        super(hash, MessageType.UPLOAD_RESPONSE, 0, new byte[]{accept ? (byte) 1 : 0});
+        this(hash, 0, accept);
+    }
+
+    public UploadResponseMessage(Hash hash, int block, boolean accept) {
+        super(hash, MessageType.UPLOAD_RESPONSE, block, new byte[]{accept ? (byte) 1 : 0});
         this.accept = accept;
     }
 
