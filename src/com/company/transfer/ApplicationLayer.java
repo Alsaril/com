@@ -2,6 +2,7 @@ package com.company.transfer;
 
 import com.company.transfer.interfaces.IApplicationLayer;
 import com.company.transfer.interfaces.ILinkLayer;
+import com.company.transfer.message.DownloadResponseMessage;
 import com.company.transfer.message.Message;
 import com.company.transfer.message.UploadRequestMessage;
 import com.company.transfer.message.UploadResponseMessage;
@@ -237,20 +238,18 @@ public class ApplicationLayer implements IApplicationLayer {
                         file.setStatus(File.FileStatus.PAUSE);
                         break;
                     case UPLOAD_REQUEST:
-                        UploadRequestMessage upm = (UploadRequestMessage) m;
-                        window.showTransferDialog(upm.hash, upm.name, upm.size, fileMap.containsKey(upm.hash), true);
+                        UploadRequestMessage urm = (UploadRequestMessage) m;
+                        window.showTransferDialog(urm.hash, urm.name, urm.size, fileMap.containsKey(urm.hash), true, 0);
                         break;
                     case UPLOAD_RESPONSE:
-                        UploadResponseMessage upm1 = (UploadResponseMessage) m;
-                        if (upm1.accept) {
+                        UploadResponseMessage urm1 = (UploadResponseMessage) m;
+                        if (urm1.accept) {
                             uploadLock.lock();
                             try {
                                 file.setStatus(File.FileStatus.TRANSFER);
-                                file.seek(upm1.position);
+                                file.seek(urm1.position);
                                 uploadFiles.add(file);
                                 uploadCondition.signal();
-                            } catch (IOException e) {
-                                addEvent(e, Event.EventType.IO);
                             } finally {
                                 uploadLock.unlock();
                             }
@@ -259,9 +258,14 @@ public class ApplicationLayer implements IApplicationLayer {
                         }
                         break;
                     case DOWNLOAD_REQUEST:
-                        window.showTransferDialog(m.hash, file.name, file.size, true, false);
+                        window.showTransferDialog(m.hash, file.name, file.size, true, false, m.position);
                         break;
                     case DOWNLOAD_RESPONSE:
+                        DownloadResponseMessage drm = (DownloadResponseMessage) m;
+                        if (drm.accept) {
+                            file.setStatus(File.FileStatus.TRANSFER);
+                            downloadFiles.add(file);
+                        }
                         break;
                     case STOP_TRANSFER:
                         uploadLock.lock();
@@ -312,31 +316,47 @@ public class ApplicationLayer implements IApplicationLayer {
         return model;
     }
 
-    public void accept(Hash hash, String name, long size, boolean b, boolean second, boolean upload) {
-        File file;
-        if (b) {
-            if (!second) {
-                try {
-                    java.io.File f = new java.io.File(name);
-                    if (!f.exists()) {
-                        f.createNewFile();
-                    }
-                    file = new File(hash, f, size);
-                } catch (IOException e) {
-                    System.err.println();
-                    return;
-                }
-                fileList.add(file);
-                fileMap.put(file.hash, file);
-            } else {
-                file = fileMap.get(hash);
-            }
-            file.setStatus(File.FileStatus.TRANSFER);
-            downloadFiles.add(file);
-            addEvent(new UploadResponseMessage(hash, file.getPosition(), true), Event.EventType.INNER);
-        } else {
-            addEvent(new UploadResponseMessage(hash, false), Event.EventType.INNER);
+    public void accept(Hash hash, String name, long size, boolean accept, boolean second, boolean upload, long position) {
+        if (!accept) {
+            addEvent(upload ? new DownloadResponseMessage(hash, false) :
+                    new UploadResponseMessage(hash, false), Event.EventType.INNER);
+            return;
         }
+        File file;
+        if (!upload) {
+            file = fileMap.get(hash);
+            addEvent(new DownloadResponseMessage(hash, true), Event.EventType.INNER);
+            file.setStatus(File.FileStatus.TRANSFER);
+            file.seek(position);
+
+            uploadLock.lock();
+            try {
+                uploadFiles.add(file);
+                uploadCondition.signal();
+            } finally {
+                uploadLock.unlock();
+            }
+            return;
+        }
+        if (!second) {
+            try {
+                java.io.File f = new java.io.File(name);
+                if (!f.exists()) {
+                    f.createNewFile();
+                }
+                file = new File(hash, f, size);
+            } catch (IOException e) {
+                System.err.println();
+                return;
+            }
+            fileList.add(file);
+            fileMap.put(file.hash, file);
+        } else {
+            file = fileMap.get(hash);
+        }
+        file.setStatus(File.FileStatus.TRANSFER);
+        downloadFiles.add(file);
+        addEvent(new UploadResponseMessage(hash, file.getPosition(), true), Event.EventType.INNER);
     }
 
     public boolean addFile(File file) {

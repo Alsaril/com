@@ -35,6 +35,8 @@ public class Message {
             return new UploadRequestMessage(message, length);
         } else if (type == MessageType.UPLOAD_RESPONSE) {
             return new UploadResponseMessage(message, length);
+        } else if (type == MessageType.DOWNLOAD_RESPONSE) {
+            return new DownloadResponseMessage(message, length);
         }
         return new Message(message, length);
     }

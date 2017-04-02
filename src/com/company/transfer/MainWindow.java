@@ -236,7 +236,7 @@ public class MainWindow implements ListSelectionListener {
         return frame;
     }
 
-    public void showTransferDialog(Hash hash, String name, long size, boolean second, boolean upload) {
+    public void showTransferDialog(Hash hash, String name, long size, boolean second, boolean upload, long position) {
         SwingUtilities.invokeLater(() -> {
             String[] names = {"B", "KB", "MB", "GB"};
             long _size = size;
@@ -268,7 +268,7 @@ public class MainWindow implements ListSelectionListener {
             dialog.setVisible(true);
 
             int value = (Integer) optionPane.getValue();
-            applicationLayer.accept(hash, name, size, value == JOptionPane.YES_OPTION, second, upload);
+            applicationLayer.accept(hash, name, size, value == JOptionPane.YES_OPTION, second, upload, position);
         });
     }
 

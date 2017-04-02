@@ -84,8 +84,12 @@ public class File {
         return raf.read(buffer);
     }
 
-    public void seek(long position) throws IOException {
-        raf.seek(position);
+    public void seek(long position) {
+        try {
+            raf.seek(position);
+        } catch (IOException e) {
+            error = true;
+        }
     }
 
     public long getPosition() {
