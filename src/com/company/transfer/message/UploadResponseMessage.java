@@ -10,8 +10,8 @@ public class UploadResponseMessage extends Message {
         this(hash, 0, accept);
     }
 
-    public UploadResponseMessage(Hash hash, int block, boolean accept) {
-        super(hash, MessageType.UPLOAD_RESPONSE, block, new byte[]{accept ? (byte) 1 : 0});
+    public UploadResponseMessage(Hash hash, long position, boolean accept) {
+        super(hash, MessageType.UPLOAD_RESPONSE, position, new byte[]{accept ? (byte) 1 : 0});
         this.accept = accept;
     }
 

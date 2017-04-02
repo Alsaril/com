@@ -5,6 +5,7 @@ import java.io.IOException;
 public interface ILinkLayer {
     void receive_byte(byte b);
 
+    // synchronized
     void send_msg(byte[] message) throws IOException;
 
     void error_lnk();

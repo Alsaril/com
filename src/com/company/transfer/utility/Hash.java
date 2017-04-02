@@ -4,7 +4,12 @@ import java.util.Arrays;
 
 public class Hash {
     public static final int LENGTH = 16;
+    public static final Hash EMPTY = new Hash();
     private final byte[] value;
+
+    private Hash() {
+        value = null;
+    }
 
     public Hash(byte[] value) {
         assert value.length == LENGTH;
@@ -22,7 +27,7 @@ public class Hash {
 
     @Override
     public String toString() {
-        return Utility.bytesToHex(value);
+        return value != null ? Utility.bytesToHex(value) : "null";
     }
 
     @Override
@@ -32,9 +37,13 @@ public class Hash {
 
     @Override
     public int hashCode() {
-        return ((value[0] ^ value[4] ^ value[8] ^ value[12]) << 3) +
+        return value != null ? ((value[0] ^ value[4] ^ value[8] ^ value[12]) << 3) +
                 ((value[1] ^ value[5] ^ value[9] ^ value[13]) << 2) +
                 ((value[2] ^ value[6] ^ value[10] ^ value[14]) << 1) +
-                (value[3] ^ value[7] ^ value[11] ^ value[15]);
+                (value[3] ^ value[7] ^ value[11] ^ value[15]) : 0;
+    }
+
+    public boolean isEmpty() {
+        return value == null;
     }
 }

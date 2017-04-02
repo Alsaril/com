@@ -21,35 +21,24 @@ public class Utility {
             rootPath = dis.readUTF();
             int length = dis.readInt();
             for (int i = 0; i < length; i++) {
-                File f = new File(new Hash(dis.readUTF()),
-                        dis.readUTF(),
-                        dis.readUTF(),
-                        dis.readLong(),
-                        dis.readLong(),
-                        File.Location.values()[dis.readInt()],
-                        dis.readInt(),
-                        File.FileStatus.values()[dis.readInt()]);
-                files.put(f.hash, f);
+                File f = File.read(dis);
+                if (!f.hash.isEmpty()) {
+                    files.put(f.hash, f);
+                }
             }
         } catch (IOException e) {
         }
         return files;
     }
 
-    //Message.Hash hash, String path, String name, long size, int block, long date, FileStatus status
     public static void save() {
         try (DataOutputStream dos = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(configPath)))) {
             dos.writeUTF(rootPath);
             dos.writeInt(files.size());
             for (File f : files.values()) {
-                dos.writeUTF(f.hash.toString());
-                dos.writeUTF(f.path);
-                dos.writeUTF(f.name);
-                dos.writeLong(f.size);
-                dos.writeInt(f.getBlock());
-                dos.writeLong(f.date);
-                dos.writeInt(f.getStatus().ordinal());
+                f.write(dos);
             }
+            dos.flush();
         } catch (IOException e) {
         }
     }
@@ -106,6 +95,6 @@ public class Utility {
     }
 
     public static void showError(String s, MainWindow window) {
-        JOptionPane.showMessageDialog(window.getFrame(), s);
+        SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(window.getFrame(), s));
     }
 }

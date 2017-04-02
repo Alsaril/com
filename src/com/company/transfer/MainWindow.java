@@ -6,6 +6,10 @@ import com.company.transfer.utility.Hash;
 import com.company.transfer.utility.Utility;
 
 import javax.swing.*;
+import javax.swing.event.ListDataEvent;
+import javax.swing.event.ListDataListener;
+import javax.swing.event.ListSelectionEvent;
+import javax.swing.event.ListSelectionListener;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.WindowAdapter;
@@ -19,7 +23,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 
-public class MainWindow {
+public class MainWindow implements ListSelectionListener {
     private static final int PORT = 53454;
     static ApplicationLayer l = null;
     private JFrame frame;
@@ -67,6 +71,7 @@ public class MainWindow {
         frame.addWindowListener(new WindowAdapter() {
                                     @Override
                                     public void windowClosing(WindowEvent e) {
+                                        applicationLayer.stopTransfer();
                                         Utility.save();
                                         System.exit(0);
                                     }
@@ -102,43 +107,27 @@ public class MainWindow {
             }
             return elemPanel;
         });
-        list.addListSelectionListener(e -> {
-            selected = list.getSelectedValue();
-            if (selected == null) return;
-            delete.setEnabled(true);
-            switch (selected.getStatus()) {
-                case REQUEST:
-                    start.setEnabled(false);
-                    stop.setEnabled(false);
-                    break;
-                case TRANSFER:
-                    start.setEnabled(false);
-                    stop.setEnabled(true);
-                    break;
-                case DECLINED:
-                    start.setEnabled(true);
-                    stop.setEnabled(false);
-                    break;
-                case COMPLETE:
-                    start.setEnabled(false);
-                    stop.setEnabled(false);
-                    break;
-                case PAUSE:
-                    start.setEnabled(true);
-                    stop.setEnabled(false);
-                    break;
-                case HASHING:
-                    start.setEnabled(false);
-                    start.setEnabled(false);
-                    break;
+        applicationLayer.getModel().addListDataListener(new ListDataListener() {
+            @Override
+            public void intervalAdded(ListDataEvent e) {
+
+            }
+
+            @Override
+            public void intervalRemoved(ListDataEvent e) {
+
+            }
+
+            @Override
+            public void contentsChanged(ListDataEvent e) {
+                MainWindow.this.valueChanged(new ListSelectionEvent(list, 0, 0, false));
             }
         });
+        list.addListSelectionListener(this);
 
         delete.addActionListener(e -> {
             applicationLayer.delete(selected);
             list.clearSelection();
-            selected = null;
-            delete.setEnabled(false);
         });
         start.addActionListener(e -> {
             applicationLayer.start(selected);
@@ -238,7 +227,7 @@ public class MainWindow {
                     l.receive_msg(message, length);
                 }
             } catch (IOException e) {
-                System.err.println(e.getMessage());
+                l.error_appl(e.getMessage());
             }
         });
     }
@@ -247,7 +236,7 @@ public class MainWindow {
         return frame;
     }
 
-    public void showUploadDialog(Hash hash, String name, long size, boolean second) {
+    public void showTransferDialog(Hash hash, String name, long size, boolean second, boolean upload) {
         SwingUtilities.invokeLater(() -> {
             String[] names = {"B", "KB", "MB", "GB"};
             long _size = size;
@@ -256,7 +245,7 @@ public class MainWindow {
                 _size >>>= 10;
                 index++;
             }
-            String text = second ? String.format("Продолжить загрузку файла \"%s\"?", name) :
+            String text = second ? String.format("Продолжить %s файла \"%s\"?", upload ? "загрузку" : "передачу", name) :
                     String.format("Загрузить файл \"%s\"?\n Размер: %d %s", name, _size, names[index]);
             final JOptionPane optionPane = new JOptionPane(text, JOptionPane.QUESTION_MESSAGE, JOptionPane.YES_NO_OPTION);
 
@@ -279,8 +268,43 @@ public class MainWindow {
             dialog.setVisible(true);
 
             int value = (Integer) optionPane.getValue();
-            applicationLayer.accept(hash, name, size, value == JOptionPane.YES_OPTION, second);
-
+            applicationLayer.accept(hash, name, size, value == JOptionPane.YES_OPTION, second, upload);
         });
+    }
+
+    @Override
+    public void valueChanged(ListSelectionEvent e) {
+        selected = (File) ((JList) e.getSource()).getSelectedValue();
+        if (selected == null) {
+            delete.setEnabled(false);
+            return;
+        }
+        delete.setEnabled(true);
+        switch (selected.getStatus()) {
+            case REQUEST:
+                start.setEnabled(false);
+                stop.setEnabled(false);
+                break;
+            case TRANSFER:
+                start.setEnabled(false);
+                stop.setEnabled(true);
+                break;
+            case DECLINED:
+                start.setEnabled(true);
+                stop.setEnabled(false);
+                break;
+            case COMPLETE:
+                start.setEnabled(false);
+                stop.setEnabled(false);
+                break;
+            case PAUSE:
+                start.setEnabled(true);
+                stop.setEnabled(false);
+                break;
+            case HASHING:
+                start.setEnabled(false);
+                start.setEnabled(false);
+                break;
+        }
     }
 }

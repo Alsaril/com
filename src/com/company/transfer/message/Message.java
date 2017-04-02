@@ -8,13 +8,13 @@ public class Message {
 
     public final Hash hash;
     public final MessageType type;
-    public final int block;
+    public final int position;
     public final byte[] data;
 
-    public Message(Hash hash, MessageType type, int block, byte[] data) {
+    public Message(Hash hash, MessageType type, long position, byte[] data) {
         this.hash = hash;
         this.type = type;
-        this.block = block;
+        this.position = (int) position; //hack
         this.data = data;
     }
 
@@ -24,7 +24,7 @@ public class Message {
         bb.get(hashBytes);
         hash = new Hash(hashBytes);
         type = MessageType.values()[bb.get()];
-        block = bb.getInt();
+        position = bb.getInt();
         data = new byte[length - bb.position()];
         bb.get(data);
     }
@@ -42,11 +42,15 @@ public class Message {
     public byte[] toByte() {
         int length = Hash.LENGTH + Byte.BYTES + Integer.BYTES + (data == null ? 0 : data.length);
         ByteBuffer bb = ByteBuffer.allocate(length);
-        bb.put(hash.value()).put((byte) type.ordinal()).putInt(block);
+        bb.put(hash.value()).put((byte) type.ordinal()).putInt(position);
         if (data != null) {
             bb.put(data);
         }
         return bb.array();
+    }
+
+    public int length() {
+        return data == null ? 0 : data.length;
     }
 
     @Override
@@ -54,7 +58,7 @@ public class Message {
         StringBuilder sb = new StringBuilder("M: ");
         sb.append(hash.toString()).append(", ");
         sb.append(type.toString()).append(", ");
-        sb.append(block).append(", ");
+        sb.append(position).append(", ");
         if (data != null) {
             sb.append(data.length);
         } else {

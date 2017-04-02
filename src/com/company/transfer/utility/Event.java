@@ -45,10 +45,10 @@ public class Event<T> implements Comparable<Event<T>> {
     @Override
     public int compareTo(Event<T> e) {
         if (priority() != e.priority()) {
-            return Integer.compare(priority(), e.priority());
+            return -Integer.compare(priority(), e.priority());
         }
         if (e.data instanceof Message && data instanceof Message) {
-            return -Integer.compare(((Message) e.data).block, ((Message) data).block);
+            return Integer.compare(((Message) data).position, ((Message) e.data).position);
         }
         return Long.compare(time, e.time);
     }

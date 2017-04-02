@@ -14,6 +14,7 @@ import javax.swing.*;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.PriorityBlockingQueue;
@@ -47,6 +48,7 @@ public class ApplicationLayer implements IApplicationLayer {
         this.linkLayer = linkLayer;
         fileMap = Utility.getFiles(config);
         fileList = new ArrayList<>(fileMap.values());
+        fileList.sort(Comparator.comparingLong(f -> f.date));
     }
 
     public void setWindow(MainWindow window) {
@@ -60,8 +62,8 @@ public class ApplicationLayer implements IApplicationLayer {
     }
 
     @Override
-    public void error_appl() {
-        addEvent(new IOException("Error from link layer"), Event.EventType.IO);
+    public void error_appl(String error) {
+        addEvent(new IOException("Error from link layer: " + error), Event.EventType.IO);
     }
 
     @Override
@@ -101,12 +103,13 @@ public class ApplicationLayer implements IApplicationLayer {
                 try {
                     boolean t = false;
                     for (File file : uploadFiles) {
-                        if (file.isError() || !file.readyToTransfer()) {
+                        if (file.isError()) {
                             continue;
                         }
                         t = true;
                         int read;
                         buffer = new byte[Utility.BLOCK_SIZE];
+                        long position = file.getPosition();
                         try {
                             read = file.read(buffer);
                         } catch (IOException e) {
@@ -115,7 +118,7 @@ public class ApplicationLayer implements IApplicationLayer {
                         }
                         if (read == -1) {
                             file.setError();
-                            Message message = new Message(file.hash, Message.MessageType.COMPLETE, file.getBlock(), null);
+                            Message message = new Message(file.hash, Message.MessageType.COMPLETE, position, null);
                             addEvent(message, Event.EventType.INNER);
                         } else {
                             byte[] temp_buffer;
@@ -126,10 +129,9 @@ public class ApplicationLayer implements IApplicationLayer {
                                 temp_buffer = buffer;
                             }
 
-                            Message message = new Message(file.hash, Message.MessageType.DATA, file.getBlock(), temp_buffer);
+                            Message message = new Message(file.hash, Message.MessageType.DATA, position, temp_buffer);
                             try {
                                 linkLayer.send_msg(message.toByte());
-                                file.incBlock();
                             } catch (IOException e) {
                                 addEvent(e, Event.EventType.IO);
                             }
@@ -139,7 +141,7 @@ public class ApplicationLayer implements IApplicationLayer {
                         uploadCondition.await();
                     }
                 } catch (InterruptedException e) {
-
+                    return;
                 } finally {
                     uploadLock.unlock();
                 }
@@ -195,12 +197,11 @@ public class ApplicationLayer implements IApplicationLayer {
                 switch (m.type) {
                     case DATA:
                         if (downloadFiles.contains(file)) {
-                            if (m.block != file.getBlock()) {
-                                addEvent(new IOException("Block number conflict: " + m.block + " , " + file.getBlock()), Event.EventType.IO);
+                            if (m.position != file.getPosition()) {
+                                addEvent(new IOException("Position conflict: " + m.position + " , " + file.getPosition()), Event.EventType.IO);
                             }
                             try {
                                 file.write(m.data);
-                                file.incBlock();
                             } catch (IOException e) {
                                 addEvent(e, Event.EventType.IO);
                             }
@@ -218,20 +219,15 @@ public class ApplicationLayer implements IApplicationLayer {
                             uploadLock.unlock();
                         }
                         if (downloadFiles.contains(file)) {
-                            try {
-                                file.close();
-                            } catch (IOException e) {
-                                addEvent(e, Event.EventType.IO);
-                            }
                             if (file.hash.equals(Utility.fileHash(new java.io.File(file.path), null))) {
                                 Utility.showError("Success.", window);
                                 file.setStatus(File.FileStatus.COMPLETE);
-                                addEvent(new Message(m.hash, Message.MessageType.COMPLETE, file.getBlock(), null), Event.EventType.INNER);
+                                addEvent(new Message(m.hash, Message.MessageType.COMPLETE, file.getPosition(), null), Event.EventType.INNER);
                                 System.out.println("Success");
                             } else {
                                 Utility.showError("Error.", window);
                                 file.setStatus(File.FileStatus.PAUSE);
-                                addEvent(new Message(m.hash, Message.MessageType.ERROR, file.getBlock(), null), Event.EventType.INNER);
+                                addEvent(new Message(m.hash, Message.MessageType.ERROR, file.getPosition(), null), Event.EventType.INNER);
                                 System.out.println("Error");
                             }
                         }
@@ -242,7 +238,7 @@ public class ApplicationLayer implements IApplicationLayer {
                         break;
                     case UPLOAD_REQUEST:
                         UploadRequestMessage upm = (UploadRequestMessage) m;
-                        window.showUploadDialog(upm.hash, upm.name, upm.size, fileMap.containsKey(upm.hash));
+                        window.showTransferDialog(upm.hash, upm.name, upm.size, fileMap.containsKey(upm.hash), true);
                         break;
                     case UPLOAD_RESPONSE:
                         UploadResponseMessage upm1 = (UploadResponseMessage) m;
@@ -250,9 +246,11 @@ public class ApplicationLayer implements IApplicationLayer {
                             uploadLock.lock();
                             try {
                                 file.setStatus(File.FileStatus.TRANSFER);
-                                file.resetInputStream(upm1.block);
+                                file.seek(upm1.position);
                                 uploadFiles.add(file);
                                 uploadCondition.signal();
+                            } catch (IOException e) {
+                                addEvent(e, Event.EventType.IO);
                             } finally {
                                 uploadLock.unlock();
                             }
@@ -261,6 +259,7 @@ public class ApplicationLayer implements IApplicationLayer {
                         }
                         break;
                     case DOWNLOAD_REQUEST:
+                        window.showTransferDialog(m.hash, file.name, file.size, true, false);
                         break;
                     case DOWNLOAD_RESPONSE:
                         break;
@@ -276,11 +275,6 @@ public class ApplicationLayer implements IApplicationLayer {
                         }
                         if (downloadFiles.contains(file)) {
                             file.setStatus(File.FileStatus.PAUSE);
-                            try {
-                                file.close();
-                            } catch (IOException e) {
-                                e.printStackTrace();
-                            }
                             downloadFiles.remove(file);
                         }
                         break;
@@ -289,18 +283,36 @@ public class ApplicationLayer implements IApplicationLayer {
 
         } else if (event.type == Event.EventType.IO) {
             // TODO destroy stack, show error
-            Exception e = (Exception) event.data;
-            System.err.println(e.getMessage());
+            stopTransfer();
+            Throwable e = (Exception) event.data;
+            throw new RuntimeException(e);
+
         } else if (event.type == Event.EventType.NOT_FOUND) {
             deleteFromUpload((File) event.data);
         }
+    }
+
+    public void stopTransfer() {
+        uploadLock.lock();
+        try {
+            for (File f : uploadFiles) {
+                f.setStatus(File.FileStatus.PAUSE);
+            }
+            uploadFiles.clear();
+        } finally {
+            uploadLock.unlock();
+        }
+        for (File f : downloadFiles) {
+            f.setStatus(File.FileStatus.PAUSE);
+        }
+        downloadFiles.clear();
     }
 
     public ListModel<File> getModel() {
         return model;
     }
 
-    public void accept(Hash hash, String name, long size, boolean b, boolean second) {
+    public void accept(Hash hash, String name, long size, boolean b, boolean second, boolean upload) {
         File file;
         if (b) {
             if (!second) {
@@ -321,10 +333,10 @@ public class ApplicationLayer implements IApplicationLayer {
             }
             file.setStatus(File.FileStatus.TRANSFER);
             downloadFiles.add(file);
-            addEvent(new UploadResponseMessage(hash, file.getBlock(), true), Event.EventType.INNER);
-            return;
+            addEvent(new UploadResponseMessage(hash, file.getPosition(), true), Event.EventType.INNER);
+        } else {
+            addEvent(new UploadResponseMessage(hash, false), Event.EventType.INNER);
         }
-        addEvent(new UploadResponseMessage(hash, false), Event.EventType.INNER);
     }
 
     public boolean addFile(File file) {
@@ -377,8 +389,7 @@ public class ApplicationLayer implements IApplicationLayer {
                 uploadLock.unlock();
             }
         } else {
-            assert 1 == 2;
-            Message message = new Message(selected.hash, Message.MessageType.DOWNLOAD_REQUEST, selected.getBlock(), null);
+            Message message = new Message(selected.hash, Message.MessageType.DOWNLOAD_REQUEST, selected.getPosition(), null);
             addEvent(message, Event.EventType.INNER);
         }
     }
@@ -390,12 +401,11 @@ public class ApplicationLayer implements IApplicationLayer {
             this.layer = layer;
             Executors.newFixedThreadPool(1).execute(() -> {
                 try {
-                    while (true) {
+                    while (!Thread.interrupted()) {
                         fireContentsChanged(this, 0, getSize());
                         Thread.sleep(500);
                     }
                 } catch (InterruptedException e) {
-
                 }
             });
         }

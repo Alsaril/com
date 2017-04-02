@@ -15,35 +15,38 @@ public class File {
     public final long size;
     public final long date;
     public final Location location;
-    public Hash hash = null;
-    private int block;
+    public Hash hash = Hash.EMPTY;
     private FileStatus status;
-    private InputStream is = null;
-    private OutputStream os = null;
+    private RandomAccessFile raf;
     private boolean error = false;
+    private double progress;
 
-    public File(Hash hash, String path, String name, long size, long date, Location location, int block, FileStatus status) {
+    public File(Hash hash, String path, String name, long size, long date, Location location, FileStatus status, long position) {
         this.hash = hash;
         this.path = path;
         this.name = name;
         this.size = size;
         this.date = date;
         this.location = location;
-        this.block = block;
         this.status = status;
+        try {
+            raf = new RandomAccessFile(path, "rw");
+            raf.seek(position);
+        } catch (IOException e) {
+
+        }
     }
 
     public File(Hash hash, java.io.File file, long size) throws FileNotFoundException {
-        this(hash, file.getAbsolutePath(), file.getName(), size, System.currentTimeMillis(), Location.REMOTE, 0, FileStatus.REQUEST);
+        this(hash, file.getAbsolutePath(), file.getName(), size, System.currentTimeMillis(), Location.REMOTE, FileStatus.REQUEST, 0);
     }
 
     public File(java.io.File file, ApplicationLayer layer) throws FileNotFoundException {
-        this(null, file.getAbsolutePath(), file.getName(), file.length(), System.currentTimeMillis(), Location.LOCAL, 0, FileStatus.HASHING);
+        this(Hash.EMPTY, file.getAbsolutePath(), file.getName(), file.length(), System.currentTimeMillis(), Location.LOCAL, FileStatus.HASHING, 0);
         if (size != 0) {
             ex.execute(() -> {
-                hash = Utility.fileHash(file, value -> block = (int) (size * value / Utility.BLOCK_SIZE));
+                hash = Utility.fileHash(file, value -> progress = value);
                 setStatus(FileStatus.REQUEST);
-                block = 0;
                 boolean copy = layer.addFile(this);
                 if (!copy) {
                     Message message = new UploadRequestMessage(hash, name, size);
@@ -53,84 +56,48 @@ public class File {
         }
     }
 
-    private void initInputStream() {
-        assert location == Location.LOCAL;
-        if (is == null) {
-            try {
-                is = new BufferedInputStream(new FileInputStream(path));
-            } catch (IOException e) {
-                error = true;
-            }
+    public static File read(DataInputStream dis) throws IOException {
+        boolean hasHash = dis.readBoolean();
+        Hash hash;
+        if (hasHash) {
+            byte[] buffer = new byte[Hash.LENGTH];
+            dis.readFully(buffer);
+            hash = new Hash(buffer);
+        } else {
+            hash = Hash.EMPTY;
         }
-    }
-
-    private void initOutputStream() {
-        assert location == Location.REMOTE;
-        if (os == null) {
-            try {
-                os = new BufferedOutputStream(new FileOutputStream(path));
-            } catch (IOException e) {
-                error = true;
-            }
-        }
+        return new File(hash,
+                dis.readUTF(), // path
+                dis.readUTF(), // name
+                dis.readLong(), // size
+                dis.readLong(), // date
+                Location.values()[dis.readInt()],
+                FileStatus.values()[dis.readInt()],
+                dis.readLong()); //position
     }
 
     public void write(byte[] data) throws IOException {
-        initOutputStream();
-        if (os != null) {
-            os.write(data);
-        }
+        raf.write(data);
     }
 
     public int read(byte[] buffer) throws IOException {
-        initInputStream();
-        if (is != null) {
-            return is.read(buffer);
-        }
-        throw new IOException();
+        return raf.read(buffer);
     }
 
-    public void close() throws IOException {
-        if (os != null) {
-            os.flush();
-            os.close();
-        }
+    public void seek(long position) throws IOException {
+        raf.seek(position);
     }
 
-    public void resetInputStream(int block) {
+    public long getPosition() {
         try {
-            if (is != null) {
-                is.close();
-            }
-            initInputStream();
-            is.skip(block * Utility.BLOCK_SIZE);
+            return raf.getFilePointer();
         } catch (IOException e) {
-            error = true;
+            return -1;
         }
-    }
-
-    public void resetOutputStream() {
-        try {
-            if (os != null) {
-                os.flush();
-                os.close();
-            }
-            os = new BufferedOutputStream(new FileOutputStream(path, true));
-        } catch (IOException e) {
-            error = true;
-        }
-    }
-
-    public int getBlock() {
-        return block;
-    }
-
-    public void incBlock() {
-        block++;
     }
 
     public int getProgress() {
-        return (int) (100.0 * block * Utility.BLOCK_SIZE / size);
+        return status == FileStatus.HASHING ? (int) (100.0 * progress) : (int) (100.0 * getPosition() / size);
     }
 
     public boolean isError() {
@@ -154,8 +121,18 @@ public class File {
         this.status = status;
     }
 
-    public boolean readyToTransfer() {
-        return true;
+    public void write(DataOutputStream dos) throws IOException {
+        dos.writeBoolean(!hash.isEmpty());
+        if (!hash.isEmpty()) {
+            dos.write(hash.value());
+        }
+        dos.writeUTF(path);
+        dos.writeUTF(name);
+        dos.writeLong(size);
+        dos.writeLong(date);
+        dos.writeInt(location.ordinal());
+        dos.writeInt(status.ordinal());
+        dos.writeLong(getPosition());
     }
 
     public enum FileStatus {
