@@ -21,6 +21,11 @@ public class File {
     private boolean error = false;
     private double progress;
 
+    private boolean stat = false;
+    private long startPart;
+    private long endPart;
+    private long partSize;
+
     public File(Hash hash, String path, String name, long size, long date, Location location, FileStatus status, long position) {
         this.hash = hash;
         this.path = path;
@@ -108,6 +113,25 @@ public class File {
         return error;
     }
 
+    public void initPart() {
+        if (!stat) {
+            startPart = System.currentTimeMillis();
+            partSize = 0;
+            stat = true;
+        }
+    }
+
+    public void incPart(long size) {
+        partSize += size;
+        endPart = System.currentTimeMillis();
+    }
+
+    public String stat() {
+        if (!stat) return "";
+        double speed = 1000.0 * partSize / (endPart - startPart);
+        return String.format(" Speed: %s/s, Remaining: %ds", Utility.unit((long) speed), (long) ((size - getPosition()) / speed));
+    }
+
     @Override
     public boolean equals(Object obj) {
         return obj instanceof File && ((File) obj).hash.equals(hash) || obj == this;
@@ -123,6 +147,9 @@ public class File {
 
     public void setStatus(FileStatus status) {
         this.status = status;
+        if (status != FileStatus.TRANSFER) {
+            stat = false;
+        }
     }
 
     public void write(DataOutputStream dos) throws IOException {

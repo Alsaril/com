@@ -132,7 +132,9 @@ public class ApplicationLayer implements IApplicationLayer {
 
                             Message message = new Message(file.hash, Message.MessageType.DATA, position, temp_buffer);
                             try {
+                                file.initPart();
                                 linkLayer.send_msg(message.toByte());
+                                file.incPart(buffer.length);
                             } catch (IOException e) {
                                 addEvent(e, Event.EventType.IO);
                             }
@@ -158,20 +160,24 @@ public class ApplicationLayer implements IApplicationLayer {
 
         }
         if (file == null || file.size == 0) {
-            Utility.showError("Empty file.", window);
+            Utility.showMessage("Empty file.", window);
         } else {
             stagedFiles.add(file);
         }
     }
 
-    public <T> void addEvent(T data, Event.EventType type) {
-        events.add(new Event<>(data, type));
+    public void addEvent(Event event) {
         eventLock.lock();
         try {
+            events.add(event);
             eventCondition.signal();
         } finally {
             eventLock.unlock();
         }
+    }
+
+    public <T> void addEvent(T data, Event.EventType type) {
+        addEvent(new Event<>(data, type));
     }
 
 
@@ -188,6 +194,9 @@ public class ApplicationLayer implements IApplicationLayer {
         if (event.type == Event.EventType.OUTER || event.type == Event.EventType.INNER) {
             Message m = (Message) event.data;
             File file = fileMap.get(m.hash);
+            if (file == null) {
+                return;
+            }
             if (event.type == Event.EventType.INNER) {
                 try {
                     linkLayer.send_msg(m.toByte());
@@ -199,10 +208,13 @@ public class ApplicationLayer implements IApplicationLayer {
                     case DATA:
                         if (downloadFiles.contains(file)) {
                             if (m.position != file.getPosition()) {
-                                addEvent(new IOException("Position conflict: " + m.position + " , " + file.getPosition()), Event.EventType.IO);
+                                addEvent(event);
+                                System.err.println("Position conflict: " + m.position + " , " + file.getPosition());
                             }
                             try {
+                                file.initPart();
                                 file.write(m.data);
+                                file.incPart(m.data.length);
                             } catch (IOException e) {
                                 addEvent(e, Event.EventType.IO);
                             }
@@ -214,19 +226,19 @@ public class ApplicationLayer implements IApplicationLayer {
                             if (uploadFiles.contains(file)) {
                                 file.setStatus(File.FileStatus.COMPLETE);
                                 uploadFiles.remove(file);
-                                Utility.showError("Success.", window);
+                                Utility.showMessage("Success.", window);
                             }
                         } finally {
                             uploadLock.unlock();
                         }
                         if (downloadFiles.contains(file)) {
                             if (file.hash.equals(Utility.fileHash(new java.io.File(file.path), null))) {
-                                Utility.showError("Success.", window);
+                                Utility.showMessage("Success.", window);
                                 file.setStatus(File.FileStatus.COMPLETE);
                                 addEvent(new Message(m.hash, Message.MessageType.COMPLETE, file.getPosition(), null), Event.EventType.INNER);
                                 System.out.println("Success");
                             } else {
-                                Utility.showError("Error.", window);
+                                Utility.showMessage("Error.", window);
                                 file.setStatus(File.FileStatus.PAUSE);
                                 addEvent(new Message(m.hash, Message.MessageType.ERROR, file.getPosition(), null), Event.EventType.INNER);
                                 System.out.println("Error");
@@ -362,7 +374,7 @@ public class ApplicationLayer implements IApplicationLayer {
     public boolean addFile(File file) {
         boolean result = fileMap.containsKey(file.hash);
         if (result) {
-            Utility.showError(String.format("File %s has already transferred.", file.name), window);
+            Utility.showMessage(String.format("File %s has already transferred.", file.name), window);
         } else {
             fileMap.put(file.hash, file);
             fileList.add(file);

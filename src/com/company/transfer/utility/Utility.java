@@ -12,6 +12,7 @@ public class Utility {
     public static final int BLOCK_SIZE = 1024 * 4;
     private static final char[] hexArray = "0123456789ABCDEF".toCharArray();
     private static final HashMap<Hash, File> files = new HashMap<>();
+    private static final String[] names = {"B", "KB", "MB", "GB"};
     public static String rootPath = "";
     private static String configPath;
 
@@ -94,7 +95,16 @@ public class Utility {
         return pos == -1 ? str : str.substring(0, pos);
     }
 
-    public static void showError(String s, MainWindow window) {
+    public static void showMessage(String s, MainWindow window) {
         SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(window.getFrame(), s));
+    }
+
+    public static String unit(long value) {
+        int index = 0;
+        while (value >= 1024) {
+            value >>>= 10;
+            index++;
+        }
+        return String.format("%d %s", value, names[index]);
     }
 }

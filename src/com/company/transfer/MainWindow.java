@@ -11,7 +11,6 @@ import javax.swing.event.ListDataListener;
 import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
 import java.awt.*;
-import java.awt.event.ActionEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.DataInputStream;
@@ -19,11 +18,13 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.Scanner;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 
 public class MainWindow implements ListSelectionListener {
+    private static final String[] PORTS = {"COM1", "COM2"};
     private static final int PORT = 53454;
     static ApplicationLayer l = null;
     private JFrame frame;
@@ -56,15 +57,35 @@ public class MainWindow implements ListSelectionListener {
         panel.add(stop);
         panel.add(settings);
         panel.add(connect);
-        open.addActionListener(new AbstractAction() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                JFileChooser fileChooser = new JFileChooser();
-                int returnValue = fileChooser.showOpenDialog(frame);
-                if (returnValue == JFileChooser.APPROVE_OPTION) {
-                    applicationLayer.open(fileChooser.getSelectedFile());
-                }
+        open.addActionListener(e -> {
+            JFileChooser fileChooser = new JFileChooser();
+            int returnValue = fileChooser.showOpenDialog(frame);
+            if (returnValue == JFileChooser.APPROVE_OPTION) {
+                applicationLayer.open(fileChooser.getSelectedFile());
             }
+        });
+        settings.addActionListener(e -> {
+            JDialog settings = new JDialog(frame, "settings", true);
+
+            JPanel sPanel = new JPanel();
+            sPanel.setLayout(new BoxLayout(sPanel, BoxLayout.Y_AXIS));
+            JComboBox<String> box = new JComboBox<>(PORTS);
+            sPanel.add(new JLabel("COM port"));
+            sPanel.add(box);
+            sPanel.add(new JLabel("Download directory"));
+            JTextField dir = new JTextField();
+            sPanel.add(dir);
+            JButton b = new JButton("OK");
+            sPanel.add(b);
+            box.setSelectedIndex(0);
+            b.addActionListener(e1 -> {
+                System.out.println("Selected port: " + box.getSelectedItem());
+                System.out.println("Selected dir: " + dir.getText());
+                settings.setVisible(false);
+            });
+            settings.getContentPane().add(sPanel);
+            settings.pack();
+            settings.setVisible(true);
         });
 
         frame.add(panel, BorderLayout.NORTH);
@@ -93,7 +114,7 @@ public class MainWindow implements ListSelectionListener {
                 progressBar.setValue(progress);
                 progressBar.setString(null);
             }
-            JLabel hash = new JLabel(file.hash + " (" + file.getStatus().toString() + ")");
+            JLabel hash = new JLabel(file.hash + " (" + file.getStatus().toString() + ")" + file.stat());
             elemPanel.add(name, BorderLayout.NORTH);
             elemPanel.add(progressBar, BorderLayout.CENTER);
             elemPanel.add(hash, BorderLayout.SOUTH);
@@ -172,7 +193,10 @@ public class MainWindow implements ListSelectionListener {
                 s = ss.accept();
             } else {
                 System.out.println("Client");
-                s = new Socket("127.0.0.1", PORT);
+                Scanner sc = new Scanner(System.in);
+                System.out.print("Enter remote address: ");
+                String address = sc.nextLine();
+                s = new Socket(address, PORT);
             }
         } catch (IOException e) {
             System.err.println(e.getMessage());
@@ -238,15 +262,8 @@ public class MainWindow implements ListSelectionListener {
 
     public void showTransferDialog(Hash hash, String name, long size, boolean second, boolean upload, long position) {
         SwingUtilities.invokeLater(() -> {
-            String[] names = {"B", "KB", "MB", "GB"};
-            long _size = size;
-            int index = 0;
-            while (_size >= 1024) {
-                _size >>>= 10;
-                index++;
-            }
             String text = second ? String.format("Продолжить %s файла \"%s\"?", upload ? "загрузку" : "передачу", name) :
-                    String.format("Загрузить файл \"%s\"?\n Размер: %d %s", name, _size, names[index]);
+                    String.format("Загрузить файл \"%s\"?\n Размер: %s", name, Utility.unit(size));
             final JOptionPane optionPane = new JOptionPane(text, JOptionPane.QUESTION_MESSAGE, JOptionPane.YES_NO_OPTION);
 
             final JDialog dialog = new JDialog(frame, "Click a button", true);
