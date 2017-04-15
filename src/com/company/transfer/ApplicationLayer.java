@@ -12,7 +12,6 @@ import com.company.transfer.utility.Hash;
 import com.company.transfer.utility.Utility;
 
 import javax.swing.*;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -146,13 +145,8 @@ public class ApplicationLayer implements IApplicationLayer {
     }
 
     public void open(java.io.File selectedFile) {
-        File file = null;
-        try {
-            file = new File(selectedFile, this);
-        } catch (FileNotFoundException e) {
-
-        }
-        if (file == null || file.size == 0) {
+        File file = new File(selectedFile, this);
+        if (file.size == 0) {
             Utility.showMessage("Empty file.", window);
         } else {
             stagedFiles.add(file);
@@ -205,6 +199,7 @@ public class ApplicationLayer implements IApplicationLayer {
                             try {
                                 Thread.sleep(100);
                             } catch (InterruptedException e) {
+                                return;
                             }
                             break;
                         }

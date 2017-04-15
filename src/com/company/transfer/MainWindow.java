@@ -28,12 +28,9 @@ public class MainWindow implements ListSelectionListener {
     private static final int PORT = 53454;
     static ApplicationLayer l = null;
     private JFrame frame;
-    private JButton open;
     private JButton delete;
     private JButton start;
     private JButton stop;
-    private JButton settings;
-    private JButton connect;
     private ApplicationLayer applicationLayer;
     private File selected = null;
 
@@ -42,12 +39,12 @@ public class MainWindow implements ListSelectionListener {
         applicationLayer.setWindow(this);
         frame = new JFrame(title);
         JPanel panel = new JPanel();
-        open = new JButton("Open");
+        JButton open = new JButton("Open");
         delete = new JButton("Delete");
         start = new JButton("Start");
         stop = new JButton("Stop");
-        settings = new JButton("Settings");
-        connect = new JButton("Connect");
+        JButton settings1 = new JButton("Settings");
+        JButton connect = new JButton("Connect");
         delete.setEnabled(false);
         start.setEnabled(false);
         stop.setEnabled(false);
@@ -55,7 +52,7 @@ public class MainWindow implements ListSelectionListener {
         panel.add(delete);
         panel.add(start);
         panel.add(stop);
-        panel.add(settings);
+        panel.add(settings1);
         panel.add(connect);
         open.addActionListener(e -> {
             JFileChooser fileChooser = new JFileChooser();
@@ -64,7 +61,7 @@ public class MainWindow implements ListSelectionListener {
                 applicationLayer.open(fileChooser.getSelectedFile());
             }
         });
-        settings.addActionListener(e -> {
+        settings1.addActionListener(e -> {
             JDialog settings = new JDialog(frame, "settings", true);
 
             JPanel sPanel = new JPanel();
@@ -240,7 +237,7 @@ public class MainWindow implements ListSelectionListener {
         ex.execute(() -> {
             try {
                 byte[] message;
-                while (true) {
+                while (!Thread.interrupted()) {
                     int length = is.readInt();
                     message = new byte[length];
                     is.readFully(message);

@@ -4,7 +4,10 @@ import com.company.transfer.ApplicationLayer;
 import com.company.transfer.message.Message;
 import com.company.transfer.message.UploadRequestMessage;
 
-import java.io.*;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
@@ -42,11 +45,11 @@ public class File {
         }
     }
 
-    public File(Hash hash, java.io.File file, long size) throws FileNotFoundException {
+    public File(Hash hash, java.io.File file, long size) {
         this(hash, file.getAbsolutePath(), file.getName(), size, System.currentTimeMillis(), Location.REMOTE, FileStatus.REQUEST, 0);
     }
 
-    public File(java.io.File file, ApplicationLayer layer) throws FileNotFoundException {
+    public File(java.io.File file, ApplicationLayer layer) {
         this(Hash.EMPTY, file.getAbsolutePath(), file.getName(), file.length(), System.currentTimeMillis(), Location.LOCAL, FileStatus.HASHING, 0);
         if (size != 0) {
             ex.execute(() -> {
@@ -153,8 +156,8 @@ public class File {
     }
 
     public void write(DataOutputStream dos) throws IOException {
-        dos.writeBoolean(!hash.isEmpty());
-        if (!hash.isEmpty()) {
+        dos.writeBoolean(hash.hasValue());
+        if (hash.hasValue()) {
             dos.write(hash.value());
         }
         dos.writeUTF(path);

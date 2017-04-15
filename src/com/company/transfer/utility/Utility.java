@@ -26,7 +26,7 @@ public class Utility {
             int length = dis.readInt();
             for (int i = 0; i < length; i++) {
                 File f = File.read(dis);
-                if (!f.hash.isEmpty()) {
+                if (f.hash.hasValue()) {
                     files.put(f.hash, f);
                 }
             }

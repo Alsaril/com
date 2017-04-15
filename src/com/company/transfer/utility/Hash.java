@@ -43,7 +43,7 @@ public class Hash {
                 (value[3] ^ value[7] ^ value[11] ^ value[15]) : 0;
     }
 
-    public boolean isEmpty() {
-        return value == null;
+    public boolean hasValue() {
+        return value != null;
     }
 }
