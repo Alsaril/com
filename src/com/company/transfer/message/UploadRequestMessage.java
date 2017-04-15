@@ -12,20 +12,26 @@ public class UploadRequestMessage extends Message {
 
     public UploadRequestMessage(Hash hash, String name, long size) {
         super(hash, MessageType.UPLOAD_REQUEST, 0,
-                ByteBuffer.allocate(Long.BYTES + name.length() * Character.BYTES)
-                        .putLong(size)
-                        .put(name.getBytes())
-                        .array());
+                payload(name, size));
         this.name = name;
         this.size = size;
     }
 
-    public UploadRequestMessage(byte[] message, int length) {
-        super(message, length);
+    public UploadRequestMessage(byte[] message) {
+        super(message);
         ByteBuffer bb = ByteBuffer.wrap(data);
         size = bb.getLong();
         byte[] bytes = new byte[bb.remaining()];
         bb.get(bytes);
-        name = Utility.trimZeros(new String(bytes));
+        name = new String(bytes, Utility.charset);
+    }
+
+    private static byte[] payload(String name, long size) {
+        byte[] bytes = name.getBytes(Utility.charset);
+
+        return ByteBuffer.allocate(Long.BYTES + bytes.length)
+                .putLong(size)
+                .put(bytes)
+                .array();
     }
 }

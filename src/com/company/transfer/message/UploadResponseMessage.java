@@ -15,8 +15,8 @@ public class UploadResponseMessage extends Message {
         this.accept = accept;
     }
 
-    public UploadResponseMessage(byte[] message, int length) {
-        super(message, length);
+    public UploadResponseMessage(byte[] message) {
+        super(message);
         accept = data[0] > 0;
     }
 }

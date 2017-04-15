@@ -57,8 +57,8 @@ public class ApplicationLayer implements IApplicationLayer {
     }
 
     @Override
-    public void receive_msg(byte[] message, int length) {
-        Message m = Message.parse(message, length);
+    public void receive_msg(byte[] message) {
+        Message m = Message.parse(message);
         addEvent(m, Event.EventType.OUTER);
     }
 
@@ -98,7 +98,7 @@ public class ApplicationLayer implements IApplicationLayer {
             }
         }, "Event Handler").start();
         new Thread(() -> {
-            byte[] buffer;
+            byte[] buffer = new byte[Utility.BLOCK_SIZE];
             while (true) {
                 uploadLock.lock();
                 try {
@@ -109,7 +109,6 @@ public class ApplicationLayer implements IApplicationLayer {
                         }
                         t = true;
                         int read;
-                        buffer = new byte[Utility.BLOCK_SIZE];
                         long position = file.getPosition();
                         try {
                             read = file.read(buffer);
@@ -122,19 +121,13 @@ public class ApplicationLayer implements IApplicationLayer {
                             Message message = new Message(file.hash, Message.MessageType.COMPLETE, position, null);
                             addEvent(message, Event.EventType.INNER);
                         } else {
-                            byte[] temp_buffer;
-                            if (read != buffer.length) {
-                                temp_buffer = new byte[read];
-                                System.arraycopy(buffer, 0, temp_buffer, 0, read);
-                            } else {
-                                temp_buffer = buffer;
-                            }
-
-                            Message message = new Message(file.hash, Message.MessageType.DATA, position, temp_buffer);
+                            byte[] send_buffer = new byte[read];
+                            System.arraycopy(buffer, 0, send_buffer, 0, read);
+                            Message message = new Message(file.hash, Message.MessageType.DATA, position, send_buffer);
                             try {
                                 file.initPart();
                                 linkLayer.send_msg(message.toByte());
-                                file.incPart(buffer.length);
+                                file.incPart(message.data.length);
                             } catch (IOException e) {
                                 addEvent(e, Event.EventType.IO);
                             }
@@ -194,9 +187,6 @@ public class ApplicationLayer implements IApplicationLayer {
         if (event.type == Event.EventType.OUTER || event.type == Event.EventType.INNER) {
             Message m = (Message) event.data;
             File file = fileMap.get(m.hash);
-            if (file == null) {
-                return;
-            }
             if (event.type == Event.EventType.INNER) {
                 try {
                     linkLayer.send_msg(m.toByte());
@@ -206,18 +196,24 @@ public class ApplicationLayer implements IApplicationLayer {
             } else { // outer messages
                 switch (m.type) {
                     case DATA:
-                        if (downloadFiles.contains(file)) {
-                            if (m.position != file.getPosition()) {
-                                addEvent(event);
-                                System.err.println("Position conflict: " + m.position + " , " + file.getPosition());
-                            }
+                        if (!downloadFiles.contains(file)) {
+                            break;
+                        }
+                        if (m.position != file.getPosition()) {
+                            addEvent(event);
+                            System.err.println("Position conflict: get " + m.position + ", need " + file.getPosition());
                             try {
-                                file.initPart();
-                                file.write(m.data);
-                                file.incPart(m.data.length);
-                            } catch (IOException e) {
-                                addEvent(e, Event.EventType.IO);
+                                Thread.sleep(100);
+                            } catch (InterruptedException e) {
                             }
+                            break;
+                        }
+                        try {
+                            file.initPart();
+                            file.write(m.data);
+                            file.incPart(m.data.length);
+                        } catch (IOException e) {
+                            addEvent(e, Event.EventType.IO);
                         }
                         break;
                     case COMPLETE:
@@ -270,6 +266,9 @@ public class ApplicationLayer implements IApplicationLayer {
                         }
                         break;
                     case DOWNLOAD_REQUEST:
+                        if (file == null) {
+                            return;
+                        }
                         window.showTransferDialog(m.hash, file.name, file.size, true, false, m.position);
                         break;
                     case DOWNLOAD_RESPONSE:

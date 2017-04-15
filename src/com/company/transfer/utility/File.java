@@ -81,15 +81,15 @@ public class File {
                 dis.readLong()); //position
     }
 
-    public void write(byte[] data) throws IOException {
+    public synchronized void write(byte[] data) throws IOException {
         raf.write(data);
     }
 
-    public int read(byte[] buffer) throws IOException {
+    public synchronized int read(byte[] buffer) throws IOException {
         return raf.read(buffer);
     }
 
-    public void seek(long position) {
+    public synchronized void seek(long position) {
         try {
             raf.seek(position);
         } catch (IOException e) {
@@ -97,7 +97,7 @@ public class File {
         }
     }
 
-    public long getPosition() {
+    public synchronized long getPosition() {
         try {
             return raf.getFilePointer();
         } catch (IOException e) {

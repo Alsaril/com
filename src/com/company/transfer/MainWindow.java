@@ -239,16 +239,12 @@ public class MainWindow implements ListSelectionListener {
         ExecutorService ex = Executors.newFixedThreadPool(1);
         ex.execute(() -> {
             try {
-                byte[] message = new byte[Utility.BLOCK_SIZE * 2];
+                byte[] message;
                 while (true) {
                     int length = is.readInt();
-                    int pos = 0;
-                    while (pos != length) {
-                        int read = is.read(message, pos, length - pos);
-                        if (read == -1) return;
-                        pos += read;
-                    }
-                    l.receive_msg(message, length);
+                    message = new byte[length];
+                    is.readFully(message);
+                    l.receive_msg(message);
                 }
             } catch (IOException e) {
                 l.error_appl(e.getMessage());
@@ -294,6 +290,8 @@ public class MainWindow implements ListSelectionListener {
         selected = (File) ((JList) e.getSource()).getSelectedValue();
         if (selected == null) {
             delete.setEnabled(false);
+            start.setEnabled(false);
+            stop.setEnabled(false);
             return;
         }
         delete.setEnabled(true);

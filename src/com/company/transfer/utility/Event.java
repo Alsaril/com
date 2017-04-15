@@ -48,7 +48,7 @@ public class Event<T> implements Comparable<Event<T>> {
             return -Integer.compare(priority(), e.priority());
         }
         if (e.data instanceof Message && data instanceof Message) {
-            return Integer.compare(((Message) data).position, ((Message) e.data).position);
+            return Long.compare(((Message) data).position, ((Message) e.data).position);
         }
         return Long.compare(time, e.time);
     }

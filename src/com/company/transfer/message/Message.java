@@ -8,43 +8,44 @@ public class Message {
 
     public final Hash hash;
     public final MessageType type;
-    public final int position;
+    public final long position;
     public final byte[] data;
 
     public Message(Hash hash, MessageType type, long position, byte[] data) {
         this.hash = hash;
         this.type = type;
-        this.position = (int) position; //hack
+        this.position = position;
         this.data = data;
     }
 
-    protected Message(byte[] message, int length) {
+    protected Message(byte[] message) {
         ByteBuffer bb = ByteBuffer.wrap(message);
         byte[] hashBytes = new byte[Hash.LENGTH];
         bb.get(hashBytes);
         hash = new Hash(hashBytes);
         type = MessageType.values()[bb.get()];
-        position = bb.getInt();
-        data = new byte[length - bb.position()];
+        position = bb.getLong();
+        int length = bb.getInt();
+        data = new byte[length];
         bb.get(data);
     }
 
-    public static Message parse(byte[] message, int length) {
+    public static Message parse(byte[] message) {
         MessageType type = MessageType.values()[message[Hash.LENGTH]];
         if (type == MessageType.UPLOAD_REQUEST) {
-            return new UploadRequestMessage(message, length);
+            return new UploadRequestMessage(message);
         } else if (type == MessageType.UPLOAD_RESPONSE) {
-            return new UploadResponseMessage(message, length);
+            return new UploadResponseMessage(message);
         } else if (type == MessageType.DOWNLOAD_RESPONSE) {
-            return new DownloadResponseMessage(message, length);
+            return new DownloadResponseMessage(message);
         }
-        return new Message(message, length);
+        return new Message(message);
     }
 
     public byte[] toByte() {
-        int length = Hash.LENGTH + Byte.BYTES + Integer.BYTES + (data == null ? 0 : data.length);
+        int length = Hash.LENGTH + Byte.BYTES + Long.BYTES + Integer.BYTES + length();
         ByteBuffer bb = ByteBuffer.allocate(length);
-        bb.put(hash.value()).put((byte) type.ordinal()).putInt(position);
+        bb.put(hash.value()).put((byte) type.ordinal()).putLong(position).putInt(length());
         if (data != null) {
             bb.put(data);
         }

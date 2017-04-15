@@ -11,8 +11,8 @@ public class DownloadResponseMessage extends Message {
         this.accept = accept;
     }
 
-    public DownloadResponseMessage(byte[] message, int length) {
-        super(message, length);
+    public DownloadResponseMessage(byte[] message) {
+        super(message);
         accept = data[0] > 0;
     }
 }

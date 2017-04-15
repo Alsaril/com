@@ -4,11 +4,14 @@ import com.company.transfer.MainWindow;
 
 import javax.swing.*;
 import java.io.*;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HashMap;
 
 public class Utility {
+    public static final Charset charset = StandardCharsets.UTF_16;
     public static final int BLOCK_SIZE = 1024 * 4;
     private static final char[] hexArray = "0123456789ABCDEF".toCharArray();
     private static final HashMap<Hash, File> files = new HashMap<>();
@@ -104,6 +107,9 @@ public class Utility {
         while (value >= 1024) {
             value >>>= 10;
             index++;
+        }
+        if (index > 3) {
+            return "Infinity";
         }
         return String.format("%d %s", value, names[index]);
     }
