@@ -1,7 +1,7 @@
-package com.company.transfer.message;
+package com.github.alsaril.application_layer.message;
 
-import com.company.transfer.utility.Hash;
-import com.company.transfer.utility.Utility;
+import com.github.alsaril.application_layer.utility.Hash;
+import com.github.alsaril.application_layer.utility.Utility;
 
 import java.nio.ByteBuffer;
 

@@ -1,4 +1,4 @@
-package com.company.transfer.utility;
+package com.github.alsaril.application_layer.utility;
 
 import java.util.Arrays;
 

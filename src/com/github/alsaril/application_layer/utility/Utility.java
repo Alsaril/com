@@ -1,6 +1,6 @@
-package com.company.transfer.utility;
+package com.github.alsaril.application_layer.utility;
 
-import com.company.transfer.MainWindow;
+import com.github.alsaril.MainWindow;
 
 import javax.swing.*;
 import java.io.*;
@@ -21,16 +21,18 @@ public class Utility {
 
     public static HashMap<Hash, File> getFiles(String config) {
         configPath = config;
-        try (DataInputStream dis = new DataInputStream(new BufferedInputStream(new FileInputStream(configPath)))) {
-            rootPath = dis.readUTF();
-            int length = dis.readInt();
-            for (int i = 0; i < length; i++) {
-                File f = File.read(dis);
-                if (f.hash.hasValue()) {
-                    files.put(f.hash, f);
+        if (new java.io.File(config).exists()) {
+            try (DataInputStream dis = new DataInputStream(new BufferedInputStream(new FileInputStream(configPath)))) {
+                rootPath = dis.readUTF();
+                int length = dis.readInt();
+                for (int i = 0; i < length; i++) {
+                    File f = File.read(dis);
+                    if (f.hash.hasValue()) {
+                        files.put(f.hash, f);
+                    }
                 }
+            } catch (IOException e) {
             }
-        } catch (IOException e) {
         }
         return files;
     }

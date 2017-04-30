@@ -1,8 +1,8 @@
-package com.company.transfer.utility;
+package com.github.alsaril.application_layer.utility;
 
-import com.company.transfer.message.Message;
+import com.github.alsaril.application_layer.message.Message;
 
-import static com.company.transfer.utility.Event.EventType.IO;
+import static com.github.alsaril.application_layer.utility.Event.EventType.IO;
 
 public class Event<T> implements Comparable<Event<T>> {
     public final T data;

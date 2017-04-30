@@ -1,9 +1,11 @@
-package com.company.transfer;
+package com.github.alsaril;
 
-import com.company.transfer.interfaces.ILinkLayer;
-import com.company.transfer.utility.File;
-import com.company.transfer.utility.Hash;
-import com.company.transfer.utility.Utility;
+import com.github.alsaril.application_layer.ApplicationLayer;
+import com.github.alsaril.application_layer.utility.File;
+import com.github.alsaril.application_layer.utility.Hash;
+import com.github.alsaril.application_layer.utility.Utility;
+import com.github.alsaril.interfaces.ConnectionListener;
+import com.github.alsaril.physical_layer.PhysicalLayer;
 
 import javax.swing.*;
 import javax.swing.event.ListDataEvent;
@@ -13,36 +15,36 @@ import javax.swing.event.ListSelectionListener;
 import java.awt.*;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
-import java.net.ServerSocket;
-import java.net.Socket;
-import java.util.Scanner;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 
-public class MainWindow implements ListSelectionListener {
+public class MainWindow implements ListSelectionListener, ConnectionListener {
     private static final String[] PORTS = {"COM1", "COM2"};
     private static final int PORT = 53454;
     static ApplicationLayer l = null;
+
+    static {
+        PhysicalLayer.getPortNames();
+    }
+
     private JFrame frame;
     private JButton delete;
     private JButton start;
     private JButton stop;
+    private JLabel status;
     private ApplicationLayer applicationLayer;
     private File selected = null;
+    private String port = null;
 
-    public MainWindow(ApplicationLayer applicationLayer, String title) {
+    public MainWindow(ApplicationLayer applicationLayer) {
         this.applicationLayer = applicationLayer;
         applicationLayer.setWindow(this);
-        frame = new JFrame(title);
+        frame = new JFrame("File Transfer");
         JPanel panel = new JPanel();
         JButton open = new JButton("Open");
         delete = new JButton("Delete");
         start = new JButton("Start");
         stop = new JButton("Stop");
+        status = new JLabel();
         JButton settings1 = new JButton("Settings");
         JButton connect = new JButton("Connect");
         delete.setEnabled(false);
@@ -54,6 +56,7 @@ public class MainWindow implements ListSelectionListener {
         panel.add(stop);
         panel.add(settings1);
         panel.add(connect);
+        panel.add(status);
         open.addActionListener(e -> {
             JFileChooser fileChooser = new JFileChooser();
             int returnValue = fileChooser.showOpenDialog(frame);
@@ -66,7 +69,11 @@ public class MainWindow implements ListSelectionListener {
 
             JPanel sPanel = new JPanel();
             sPanel.setLayout(new BoxLayout(sPanel, BoxLayout.Y_AXIS));
-            JComboBox<String> box = new JComboBox<>(PORTS);
+            sPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+            java.util.List<String> l = PhysicalLayer.getPortNames();
+            String[] ports = new String[l.size()];
+            l.toArray(ports);
+            JComboBox<String> box = new JComboBox<>(ports);
             sPanel.add(new JLabel("COM port"));
             sPanel.add(box);
             sPanel.add(new JLabel("Download directory"));
@@ -74,13 +81,17 @@ public class MainWindow implements ListSelectionListener {
             sPanel.add(dir);
             JButton b = new JButton("OK");
             sPanel.add(b);
-            box.setSelectedIndex(0);
+            if (box.getModel().getSize() == 0) {
+                Utility.showMessage("Нет портов", MainWindow.this);
+                return;
+            }
             b.addActionListener(e1 -> {
-                System.out.println("Selected port: " + box.getSelectedItem());
+                port = box.getSelectedItem().toString();
                 System.out.println("Selected dir: " + dir.getText());
                 settings.setVisible(false);
             });
             settings.getContentPane().add(sPanel);
+            settings.setLocationRelativeTo(frame);
             settings.pack();
             settings.setVisible(true);
         });
@@ -159,8 +170,16 @@ public class MainWindow implements ListSelectionListener {
             list.clearSelection();
             list.setSelectedIndex(i);
         });
+        connect.addActionListener(e -> {
+            if (port == null) {
+                Utility.showMessage("Не выбран COM-порт", MainWindow.this);
+            } else {
+                applicationLayer.connect(port);
+            }
+        });
         frame.add(new JScrollPane(list), BorderLayout.CENTER);
         frame.setPreferredSize(new Dimension(600, 400));
+        stateChanged(ConnectionState.DISCONNECTED);
         frame.pack();
         frame.setVisible(true);
     }
@@ -176,77 +195,14 @@ public class MainWindow implements ListSelectionListener {
             System.out.println("Invalid arguments");
             return;
         }
-        boolean server = arg.equals("server");
+        String name = arg.equals("server") ? "COM3" : "COM4";
         try {
             UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
         } catch (Exception e) {
         }
-        Socket s;
-        ServerSocket ss;
-        try {
-            if (server) {
-                System.out.println("Server");
-                ss = new ServerSocket(PORT);
-                s = ss.accept();
-            } else {
-                System.out.println("Client");
-                Scanner sc = new Scanner(System.in);
-                System.out.print("Enter remote address: ");
-                String address = sc.nextLine();
-                s = new Socket(address, PORT);
-            }
-        } catch (IOException e) {
-            System.err.println(e.getMessage());
-            return;
-        }
-        DataInputStream is;
-        DataOutputStream os;
-        try {
-            is = new DataInputStream(s.getInputStream());
-            os = new DataOutputStream(s.getOutputStream());
-        } catch (IOException e) {
-            System.out.println(e.getMessage());
-            return;
-        }
-        l = new ApplicationLayer(new ILinkLayer() {
-            @Override
-            public void receive_byte(byte b) {
-
-            }
-
-            @Override
-            public synchronized void send_msg(byte[] message) throws IOException {
-                os.writeInt(message.length);
-                os.write(message);
-                os.flush();
-            }
-
-            @Override
-            public void error_lnk() {
-
-            }
-
-            @Override
-            public void start_lnk() {
-
-            }
-        }, arg);
-        new MainWindow(l, arg);
-        l.start_appl();
-        ExecutorService ex = Executors.newFixedThreadPool(1);
-        ex.execute(() -> {
-            try {
-                byte[] message;
-                while (!Thread.interrupted()) {
-                    int length = is.readInt();
-                    message = new byte[length];
-                    is.readFully(message);
-                    l.receive_msg(message);
-                }
-            } catch (IOException e) {
-                l.error_appl(e.getMessage());
-            }
-        });
+        l = new ApplicationLayer(name);
+        l.init();
+        new MainWindow(l);
     }
 
     public JFrame getFrame() {
@@ -318,5 +274,11 @@ public class MainWindow implements ListSelectionListener {
                 start.setEnabled(false);
                 break;
         }
+    }
+
+    @Override
+    public void stateChanged(ConnectionState state) {
+        ImageIcon ii = new ImageIcon(state == ConnectionState.DISCONNECTED ? "C:\\Users\\User\\Desktop\\ic_cancel_white_24px.png" : "C:\\Users\\User\\Desktop\\ic_check_white_24px.png");
+        status.setIcon(ii);
     }
 }

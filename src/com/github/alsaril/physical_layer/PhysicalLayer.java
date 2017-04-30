@@ -1,25 +1,34 @@
-package com.company;
+package com.github.alsaril.physical_layer;
 
+import com.github.alsaril.interfaces.ConnectionListener;
 import gnu.io.*;
 
 import java.io.*;
-import java.util.ArrayList;
-import java.util.Enumeration;
-import java.util.List;
-import java.util.TooManyListenersException;
+import java.util.*;
 
-public class SerialPortConnector implements SerialPortEventListener {
+public class PhysicalLayer implements SerialPortEventListener {
+
+    private static final List<String> portNames;
+
+    static {
+        List<String> result = new ArrayList<>();
+        Enumeration portList = CommPortIdentifier.getPortIdentifiers();
+        while (portList.hasMoreElements()) {
+            CommPortIdentifier portId = (CommPortIdentifier) portList.nextElement();
+            result.add(portId.getName());
+        }
+        portNames = Collections.unmodifiableList(result);
+    }
 
     private SerialPort serialPort;
     private InputStream is;
     private OutputStream os;
-
     private PipedOutputStream pos;
     private PipedInputStream pis;
-
+    private ConnectionListener listener = null;
     private byte[] buffer = new byte[256];
 
-    private SerialPortConnector(CommPortIdentifier cpi) throws SerialPortException {
+    private PhysicalLayer(CommPortIdentifier cpi) throws Exception {
         try {
             serialPort = (SerialPort) cpi.open("TerminalApp", 2000);
             is = serialPort.getInputStream();
@@ -30,29 +39,42 @@ public class SerialPortConnector implements SerialPortEventListener {
 
             serialPort.addEventListener(this);
             serialPort.notifyOnDataAvailable(true);
+            serialPort.notifyOnDSR(true);
 
             serialPort.setSerialPortParams(9600,
                     SerialPort.DATABITS_8,
                     SerialPort.STOPBITS_1,
                     SerialPort.PARITY_NONE);
+
         } catch (IOException | PortInUseException | UnsupportedCommOperationException | TooManyListenersException e) {
-            throw new SerialPortException(e.getMessage());
+            throw new Exception(e.getMessage());
         }
     }
 
-    public static SerialPortConnector open(String name) {
+    public static PhysicalLayer open(String name) {
         Enumeration portList = CommPortIdentifier.getPortIdentifiers();
         while (portList.hasMoreElements()) {
             CommPortIdentifier portId = (CommPortIdentifier) portList.nextElement();
             if (name.equals(portId.getName())) {
                 try {
-                    return new SerialPortConnector(portId);
-                } catch (SerialPortException e) {
+                    return new PhysicalLayer(portId);
+                } catch (Exception e) {
                     return null;
                 }
             }
         }
         return null;
+    }
+
+    public static List<String> getPortNames() {
+        return portNames;
+    }
+
+    public void setConnectionListener(ConnectionListener listener) {
+        this.listener = listener;
+        if (listener != null && serialPort.isDSR()) {
+            listener.stateChanged(ConnectionListener.ConnectionState.CONNECTED);
+        }
     }
 
     public void close() {
@@ -81,7 +103,10 @@ public class SerialPortConnector implements SerialPortEventListener {
                     return;
                 }
                 break;
-            default:
+            case SerialPortEvent.DSR:
+                if (listener != null) {
+                    listener.stateChanged(ConnectionListener.ConnectionState.fromBoolean(event.getNewValue()));
+                }
                 break;
         }
     }
@@ -92,15 +117,5 @@ public class SerialPortConnector implements SerialPortEventListener {
 
     public OutputStream getOutputStream() {
         return os;
-    }
-
-    public static List<String> getNames() {
-        List<String> result = new ArrayList<>();
-        Enumeration portList = CommPortIdentifier.getPortIdentifiers();
-        while (portList.hasMoreElements()) {
-            CommPortIdentifier portId = (CommPortIdentifier) portList.nextElement();
-            result.add(portId.getName());
-        }
-        return result;
     }
 }

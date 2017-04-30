@@ -1,17 +1,20 @@
-package com.company.transfer;
+package com.github.alsaril.application_layer;
 
-import com.company.transfer.interfaces.IApplicationLayer;
-import com.company.transfer.interfaces.ILinkLayer;
-import com.company.transfer.message.DownloadResponseMessage;
-import com.company.transfer.message.Message;
-import com.company.transfer.message.UploadRequestMessage;
-import com.company.transfer.message.UploadResponseMessage;
-import com.company.transfer.utility.Event;
-import com.company.transfer.utility.File;
-import com.company.transfer.utility.Hash;
-import com.company.transfer.utility.Utility;
+import com.github.alsaril.MainWindow;
+import com.github.alsaril.application_layer.message.DownloadResponseMessage;
+import com.github.alsaril.application_layer.message.Message;
+import com.github.alsaril.application_layer.message.UploadRequestMessage;
+import com.github.alsaril.application_layer.message.UploadResponseMessage;
+import com.github.alsaril.application_layer.utility.Event;
+import com.github.alsaril.application_layer.utility.File;
+import com.github.alsaril.application_layer.utility.Hash;
+import com.github.alsaril.application_layer.utility.Utility;
+import com.github.alsaril.interfaces.IApplicationLayer;
+import com.github.alsaril.interfaces.ILinkLayer;
+import com.github.alsaril.link_layer.LinkLayer;
 
 import javax.swing.*;
+import java.io.EOFException;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -41,11 +44,12 @@ public class ApplicationLayer implements IApplicationLayer {
 
     private MainWindow window;
 
-    private ILinkLayer linkLayer;
+    private ILinkLayer linkLayer = null;
     private PriorityBlockingQueue<Event<?>> events = new PriorityBlockingQueue<>();
 
-    public ApplicationLayer(ILinkLayer linkLayer, String config) {
-        this.linkLayer = linkLayer;
+    private ConnectionState state = ConnectionState.DISCONNECTED;
+
+    public ApplicationLayer(String config) {
         fileMap = Utility.getFiles(config);
         fileList = new ArrayList<>(fileMap.values());
         fileList.sort(Comparator.comparingLong(f -> f.date));
@@ -62,12 +66,12 @@ public class ApplicationLayer implements IApplicationLayer {
     }
 
     @Override
-    public void error_appl(String error) {
-        addEvent(new IOException("Error from link layer: " + error), Event.EventType.IO);
+    public void error() {
+        addEvent(new IOException("Error from link layer"), Event.EventType.IO);
     }
 
     @Override
-    public void start_appl() {
+    public void init() {
         new Thread(() -> {
             while (true) {
                 Event<?> event = events.poll();
@@ -124,6 +128,12 @@ public class ApplicationLayer implements IApplicationLayer {
                             System.arraycopy(buffer, 0, send_buffer, 0, read);
                             Message message = new Message(file.hash, Message.MessageType.DATA, position, send_buffer);
                             try {
+                                if (linkLayer == null) {
+                                    addEvent(new EOFException(), Event.EventType.IO);
+                                    stopTransfer();
+                                    t = false;
+                                    break;
+                                }
                                 file.initPart();
                                 linkLayer.send_msg(message.toByte());
                                 file.incPart(message.data.length);
@@ -182,6 +192,11 @@ public class ApplicationLayer implements IApplicationLayer {
             Message m = (Message) event.data;
             File file = fileMap.get(m.hash);
             if (event.type == Event.EventType.INNER) {
+                if (linkLayer == null) {
+                    addEvent(new EOFException(), Event.EventType.IO);
+                    stopTransfer();
+                    return;
+                }
                 try {
                     linkLayer.send_msg(m.toByte());
                 } catch (IOException e) {
@@ -294,9 +309,9 @@ public class ApplicationLayer implements IApplicationLayer {
         } else if (event.type == Event.EventType.IO) {
             // TODO destroy stack, show error
             stopTransfer();
-            Throwable e = (Exception) event.data;
-            throw new RuntimeException(e);
-
+            linkLayer = null;
+            events.clear();
+            Utility.showMessage("Нет соединения", window);
         } else if (event.type == Event.EventType.NOT_FOUND) {
             deleteFromUpload((File) event.data);
         }
@@ -418,6 +433,23 @@ public class ApplicationLayer implements IApplicationLayer {
             Message message = new Message(selected.hash, Message.MessageType.DOWNLOAD_REQUEST, selected.getPosition(), null);
             addEvent(message, Event.EventType.INNER);
         }
+    }
+
+    public void connect(String port) {
+        try {
+            this.linkLayer = new LinkLayer(port, this);
+        } catch (EOFException e) {
+            addEvent(e, Event.EventType.IO);
+        }
+    }
+
+    @Override
+    public void stateChanged(ConnectionState state) {
+        if (state == ConnectionState.DISCONNECTED && this.state == ConnectionState.CONNECTED) {
+            addEvent(new EOFException(), Event.EventType.IO);
+        }
+        this.state = state;
+        window.stateChanged(state);
     }
 
     private static class Model extends AbstractListModel<File> {

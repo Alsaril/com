@@ -1,8 +1,8 @@
-package com.company.transfer.utility;
+package com.github.alsaril.application_layer.utility;
 
-import com.company.transfer.ApplicationLayer;
-import com.company.transfer.message.Message;
-import com.company.transfer.message.UploadRequestMessage;
+import com.github.alsaril.application_layer.ApplicationLayer;
+import com.github.alsaril.application_layer.message.Message;
+import com.github.alsaril.application_layer.message.UploadRequestMessage;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
