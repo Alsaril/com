@@ -16,9 +16,7 @@ import com.github.alsaril.link_layer.LinkLayer;
 import javax.swing.*;
 import java.io.EOFException;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashMap;
+import java.util.*;
 import java.util.concurrent.Executors;
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -33,7 +31,7 @@ public class ApplicationLayer implements IApplicationLayer {
     private final ArrayList<File> fileList;
     private final ArrayList<File> stagedFiles = new ArrayList<>();
     private ArrayList<File> uploadFiles = new ArrayList<>();
-    private ArrayList<File> downloadFiles = new ArrayList<>();
+    private List<File> downloadFiles = Collections.synchronizedList(new ArrayList<>());
     private Model model = new Model(this);
 
     private Lock eventLock = new ReentrantLock();
@@ -449,6 +447,9 @@ public class ApplicationLayer implements IApplicationLayer {
             addEvent(new EOFException(), Event.EventType.IO);
         }
         this.state = state;
+        if (state == ConnectionState.DISCONNECTED) {
+            stopTransfer();
+        }
         window.stateChanged(state);
     }
 

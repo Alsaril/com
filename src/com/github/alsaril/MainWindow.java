@@ -278,7 +278,8 @@ public class MainWindow implements ListSelectionListener, ConnectionListener {
 
     @Override
     public void stateChanged(ConnectionState state) {
-        ImageIcon ii = new ImageIcon(state == ConnectionState.DISCONNECTED ? "C:\\Users\\User\\Desktop\\ic_cancel_white_24px.png" : "C:\\Users\\User\\Desktop\\ic_check_white_24px.png");
+        System.out.println("Window: " + state);
+        ImageIcon ii = new ImageIcon(state == ConnectionState.DISCONNECTED ? "ic_cancel_white_24px.png" : "ic_check_white_24px.png");
         status.setIcon(ii);
     }
 }
