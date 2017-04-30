@@ -190,17 +190,11 @@ public class MainWindow implements ListSelectionListener, ConnectionListener {
             return;
         }
         String arg = args[0];
-        if (arg == null) return;
-        if (!(arg.equals("client") || arg.equals("server"))) {
-            System.out.println("Invalid arguments");
-            return;
-        }
-        String name = arg.equals("server") ? "COM3" : "COM4";
         try {
             UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
         } catch (Exception e) {
         }
-        l = new ApplicationLayer(name);
+        l = new ApplicationLayer(arg);
         l.init();
         new MainWindow(l);
     }
