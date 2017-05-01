@@ -20,8 +20,6 @@ import java.awt.event.WindowEvent;
 
 
 public class MainWindow implements ListSelectionListener, ConnectionListener {
-    private static final String[] PORTS = {"COM1", "COM2"};
-    private static final int PORT = 53454;
     static ApplicationLayer l = null;
 
     static {
@@ -69,7 +67,7 @@ public class MainWindow implements ListSelectionListener, ConnectionListener {
             }
         });
         settings1.addActionListener(e -> {
-            JDialog settings = new JDialog(frame, "settings", true);
+            JDialog settings = new JDialog(frame, "Settings", true);
 
             JPanel sPanel = new JPanel();
             sPanel.setLayout(new BoxLayout(sPanel, BoxLayout.Y_AXIS));
@@ -233,7 +231,7 @@ public class MainWindow implements ListSelectionListener, ConnectionListener {
                     String.format("Загрузить файл \"%s\"?\n Размер: %s", name, Utility.unit(size));
             final JOptionPane optionPane = new JOptionPane(text, JOptionPane.QUESTION_MESSAGE, JOptionPane.YES_NO_OPTION);
 
-            final JDialog dialog = new JDialog(frame, "Click a button", true);
+            final JDialog dialog = new JDialog(frame, "Загрузить файл?", true);
 
             dialog.setContentPane(optionPane);
             dialog.setDefaultCloseOperation(
@@ -296,7 +294,6 @@ public class MainWindow implements ListSelectionListener, ConnectionListener {
 
     @Override
     public void stateChanged(ConnectionState state) {
-        System.out.println("Window: " + state);
         ImageIcon ii = new ImageIcon(state == ConnectionState.DISCONNECTED ? "ic_cancel_white_24px.png" : "ic_check_white_24px.png");
         status.setIcon(ii);
     }

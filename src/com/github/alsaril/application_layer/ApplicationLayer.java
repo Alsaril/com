@@ -245,22 +245,20 @@ public class ApplicationLayer implements IApplicationLayer {
                             if (uploadFiles.contains(file)) {
                                 file.setStatus(File.FileStatus.COMPLETE);
                                 uploadFiles.remove(file);
-                                Utility.showMessage("Success.", window);
+                                Utility.showMessage("Передача файла " + file.name + " завершена.", window);
                             }
                         } finally {
                             uploadLock.unlock();
                         }
                         if (downloadFiles.contains(file)) {
                             if (file.hash.equals(Utility.fileHash(new java.io.File(file.path), null))) {
-                                Utility.showMessage("Success.", window);
+                                Utility.showMessage("Передача файла " + file.name + " завершена.", window);
                                 file.setStatus(File.FileStatus.COMPLETE);
                                 addEvent(new Message(m.hash, Message.MessageType.COMPLETE, file.getPosition(), null), Event.EventType.INNER);
-                                System.out.println("Success");
                             } else {
-                                Utility.showMessage("Error.", window);
+                                Utility.showMessage("Файл " + file.name + " передан с ошибкой. Повторите передачу.", window);
                                 file.setStatus(File.FileStatus.PAUSE);
                                 addEvent(new Message(m.hash, Message.MessageType.ERROR, file.getPosition(), null), Event.EventType.INNER);
-                                System.out.println("Error");
                             }
                         }
                         System.gc();

@@ -101,7 +101,7 @@ public class Utility {
     }
 
     public static void showMessage(String s, MainWindow window) {
-        SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(window.getFrame(), s));
+        SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(window.getFrame(), s, "Сообщение", JOptionPane.INFORMATION_MESSAGE));
     }
 
     public static String unit(long value) {
