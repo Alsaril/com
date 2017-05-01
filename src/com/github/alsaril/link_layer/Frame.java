@@ -1,5 +1,7 @@
 package com.github.alsaril.link_layer;
 
+import com.github.alsaril.application_layer.utility.Utility;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -213,5 +215,10 @@ public class Frame {
         }
 
         return result;
+    }
+
+    @Override
+    public String toString() {
+        return send + " " + recv + " " + Utility.bytesToHex(checksum);
     }
 }

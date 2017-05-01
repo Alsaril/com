@@ -111,7 +111,7 @@ public class MainWindow implements ListSelectionListener, ConnectionListener {
         list.setCellRenderer((list1, file, index, isSelected, cellHasFocus) -> {
             JPanel elemPanel = new JPanel();
             elemPanel.setLayout(new BorderLayout());
-            JLabel name = new JLabel(file.name);
+            JLabel name = new JLabel((file.location == File.Location.LOCAL ? "▲ " : "▼ ") + file.name);
             int progress = file.getProgress();
             JProgressBar progressBar = new JProgressBar(0, 100);
             progressBar.setStringPainted(true);

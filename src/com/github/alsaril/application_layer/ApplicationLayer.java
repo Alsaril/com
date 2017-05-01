@@ -65,7 +65,9 @@ public class ApplicationLayer implements IApplicationLayer {
 
     @Override
     public void error() {
-        addEvent(new IOException("Error from link layer"), Event.EventType.IO);
+        if (state == ConnectionState.CONNECTED) {
+            addEvent(new IOException("Error from link layer"), Event.EventType.IO);
+        }
     }
 
     @Override
@@ -101,50 +103,63 @@ public class ApplicationLayer implements IApplicationLayer {
         new Thread(() -> {
             byte[] buffer = new byte[Utility.BLOCK_SIZE];
             while (true) {
+                List<File> files;
                 uploadLock.lock();
                 try {
-                    boolean t = false;
-                    for (File file : uploadFiles) {
-                        if (file.isError()) {
-                            continue;
-                        }
-                        t = true;
-                        int read;
-                        long position = file.getPosition();
+                    files = new ArrayList<>(uploadFiles);
+                } finally {
+                    uploadLock.unlock();
+                }
+                boolean t = false;
+                for (File file : files) {
+                    if (uploadFiles.isEmpty()) {
+                        t = false;
+                        break;
+                    }
+                    if (file.isError()) {
+                        continue;
+                    }
+                    t = true;
+                    int read;
+                    long position = file.getPosition();
+                    try {
+                        read = file.read(buffer);
+                    } catch (IOException e) {
+                        addEvent(file, Event.EventType.NOT_FOUND);
+                        continue;
+                    }
+                    if (read == -1) {
+                        file.setError();
+                        Message message = new Message(file.hash, Message.MessageType.COMPLETE, position, null);
+                        addEvent(message, Event.EventType.INNER);
+                    } else {
+                        byte[] send_buffer = new byte[read];
+                        System.arraycopy(buffer, 0, send_buffer, 0, read);
+                        Message message = new Message(file.hash, Message.MessageType.DATA, position, send_buffer);
                         try {
-                            read = file.read(buffer);
+                            if (linkLayer == null) {
+                                addEvent(new EOFException(), Event.EventType.IO);
+                                stopTransfer();
+                                t = false;
+                                break;
+                            }
+                            file.initPart();
+                            linkLayer.send_msg(message.toByte());
+                            file.incPart(message.data.length);
                         } catch (IOException e) {
-                            addEvent(file, Event.EventType.NOT_FOUND);
-                            continue;
-                        }
-                        if (read == -1) {
-                            file.setError();
-                            Message message = new Message(file.hash, Message.MessageType.COMPLETE, position, null);
-                            addEvent(message, Event.EventType.INNER);
-                        } else {
-                            byte[] send_buffer = new byte[read];
-                            System.arraycopy(buffer, 0, send_buffer, 0, read);
-                            Message message = new Message(file.hash, Message.MessageType.DATA, position, send_buffer);
-                            try {
-                                if (linkLayer == null) {
-                                    addEvent(new EOFException(), Event.EventType.IO);
-                                    stopTransfer();
-                                    t = false;
-                                    break;
-                                }
-                                file.initPart();
-                                linkLayer.send_msg(message.toByte());
-                                file.incPart(message.data.length);
-                            } catch (IOException e) {
+                            if (state == ConnectionState.CONNECTED) {
                                 addEvent(e, Event.EventType.IO);
                             }
                         }
                     }
+                }
+                uploadLock.lock();
+                try {
                     if (!t) {
                         uploadCondition.await();
                     }
                 } catch (InterruptedException e) {
-                    return;
+
                 } finally {
                     uploadLock.unlock();
                 }
@@ -309,6 +324,8 @@ public class ApplicationLayer implements IApplicationLayer {
             stopTransfer();
             linkLayer = null;
             events.clear();
+            Exception e = (Exception) event.data;
+            e.printStackTrace();
             Utility.showMessage("Нет соединения", window);
         } else if (event.type == Event.EventType.NOT_FOUND) {
             deleteFromUpload((File) event.data);

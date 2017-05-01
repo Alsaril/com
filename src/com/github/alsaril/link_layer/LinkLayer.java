@@ -46,8 +46,9 @@ public class LinkLayer implements ILinkLayer, Runnable {
 
     @Override
     public synchronized void send_msg(byte[] message) throws IOException {
-        Frame frame = new Frame(++lastSend, lastRecv, message);
-        for (int i = 0; i < 3 && lastAck != lastSend; i++) {
+        int id = ++lastSend;
+        for (int i = 0; i < 5 && lastAck != lastSend; i++) {
+            Frame frame = new Frame(id, lastRecv, message);
             frame.write(os);
             needSend = false;
             try {
@@ -57,12 +58,15 @@ public class LinkLayer implements ILinkLayer, Runnable {
             }
         }
         if (lastAck != lastSend) {
-            throw new IOException(lastAck + "get");
+            throw new IOException("Need " + lastSend + ", received " + lastRecv);
         }
     }
 
     private synchronized void sendFrame() {
-        Frame frame = new Frame(++lastSend, lastRecv, new byte[]{});
+        if (!needSend) {
+            return;
+        }
+        Frame frame = new Frame(lastSend, lastRecv, new byte[]{});
         try {
             frame.write(os);
             needSend = false;
@@ -84,15 +88,15 @@ public class LinkLayer implements ILinkLayer, Runnable {
     @Override
     public void run() {
         while (!Thread.interrupted()) {
+            sendFrame();
+            needSend = false;
             Frame frame = Frame.read(is);
-            if (needSend) {
-                sendFrame();
-            }
             synchronized (this) {
                 if (frame == null) {
                     applicationLayer.error();
                     return;
                 }
+                System.out.println(frame);
                 if (frame.send == lastRecv + 1) {
                     if (frame.message.length != 0) {
                         applicationLayer.receive_msg(frame.message);
@@ -100,7 +104,7 @@ public class LinkLayer implements ILinkLayer, Runnable {
                     lastRecv = frame.send;
                     needSend = true;
                 }
-                if (frame.recv == lastSend) {
+                if (frame.recv == lastAck + 1) {
                     lastAck = frame.recv;
                     notify();
                     needSend = true;
