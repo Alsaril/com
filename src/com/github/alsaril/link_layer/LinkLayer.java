@@ -87,16 +87,21 @@ public class LinkLayer implements ILinkLayer, Runnable {
 
     @Override
     public void run() {
+        Frame frame;
         while (!Thread.interrupted()) {
             sendFrame();
             needSend = false;
-            Frame frame = Frame.read(is);
+            try {
+                frame = Frame.read(is);
+            } catch (IOException e) {
+                applicationLayer.error();
+                return;
+            }
+            if (frame == null) {
+                needSend = true;
+                continue;
+            }
             synchronized (this) {
-                if (frame == null) {
-                    applicationLayer.error();
-                    return;
-                }
-                System.out.println(frame);
                 if (frame.send == lastRecv + 1) {
                     if (frame.message.length != 0) {
                         applicationLayer.receive_msg(frame.message);

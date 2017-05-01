@@ -2,6 +2,7 @@ package com.github.alsaril.link_layer;
 
 import com.github.alsaril.application_layer.utility.Utility;
 
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -25,18 +26,14 @@ public class Frame {
         this.message = message;
     }
 
-    public static Frame read(InputStream is) {
+    public static Frame read(InputStream is) throws IOException {
         ArrayList<Byte> frame = new ArrayList<>();
         boolean escapeNext = false;
         while (true) {
             int read;
-            try {
-                read = is.read();
-            } catch (IOException e) { // ошибка при чтении из порта
-                return null;
-            }
+            read = is.read();
             if (read == -1) {
-                return null; // конец данных из порта, а мы ожидаем еще
+                throw new EOFException();
             }
             byte b = (byte) read;
             if (escapeNext) {
