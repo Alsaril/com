@@ -376,7 +376,7 @@ public class ApplicationLayer implements IApplicationLayer {
         }
         if (!second) {
             try {
-                java.io.File f = new java.io.File(name);
+                java.io.File f = new java.io.File(Utility.rootPath + java.io.File.separator + name);
                 if (!f.exists()) {
                     f.createNewFile();
                 }
@@ -405,6 +405,11 @@ public class ApplicationLayer implements IApplicationLayer {
         }
         stagedFiles.remove(file);
         return result;
+    }
+
+    public void request(File file) {
+        Message message = new UploadRequestMessage(file.hash, file.name, file.size);
+        addEvent(message, Event.EventType.INNER);
     }
 
     public void delete(File selected) {
@@ -468,6 +473,17 @@ public class ApplicationLayer implements IApplicationLayer {
             stopTransfer();
         }
         window.stateChanged(state);
+    }
+
+    public void disconnect() {
+        stopTransfer();
+        events.clear();
+        state = ConnectionState.DISCONNECTED;
+        if (linkLayer != null) {
+            linkLayer.close();
+        }
+        linkLayer = null;
+        window.stateChanged(ConnectionState.DISCONNECTED);
     }
 
     private static class Model extends AbstractListModel<File> {

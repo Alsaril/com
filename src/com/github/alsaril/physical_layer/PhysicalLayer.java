@@ -41,7 +41,7 @@ public class PhysicalLayer implements SerialPortEventListener {
             serialPort.notifyOnDataAvailable(true);
             serialPort.notifyOnDSR(true);
 
-            serialPort.setSerialPortParams(9600,
+            serialPort.setSerialPortParams(115200,
                     SerialPort.DATABITS_8,
                     SerialPort.STOPBITS_1,
                     SerialPort.PARITY_NONE);

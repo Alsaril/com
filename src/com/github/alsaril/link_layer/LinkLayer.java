@@ -58,7 +58,7 @@ public class LinkLayer implements ILinkLayer, Runnable {
             }
         }
         if (lastAck != lastSend) {
-            throw new IOException("Need " + lastSend + ", received " + lastRecv);
+            throw new IOException("Need " + lastSend + ", received " + lastAck);
         }
     }
 

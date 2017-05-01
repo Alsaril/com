@@ -13,6 +13,8 @@ import javax.swing.event.ListDataListener;
 import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
 import java.awt.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 
@@ -47,6 +49,7 @@ public class MainWindow implements ListSelectionListener, ConnectionListener {
         status = new JLabel();
         JButton settings1 = new JButton("Settings");
         JButton connect = new JButton("Connect");
+        JButton disconnect = new JButton("Disconnect");
         delete.setEnabled(false);
         start.setEnabled(false);
         stop.setEnabled(false);
@@ -56,6 +59,7 @@ public class MainWindow implements ListSelectionListener, ConnectionListener {
         panel.add(stop);
         panel.add(settings1);
         panel.add(connect);
+        panel.add(disconnect);
         panel.add(status);
         open.addActionListener(e -> {
             JFileChooser fileChooser = new JFileChooser();
@@ -77,8 +81,20 @@ public class MainWindow implements ListSelectionListener, ConnectionListener {
             sPanel.add(new JLabel("COM port"));
             sPanel.add(box);
             sPanel.add(new JLabel("Download directory"));
-            JTextField dir = new JTextField();
+            JTextField dir = new JTextField(Utility.rootPath);
             sPanel.add(dir);
+            dir.addMouseListener(new MouseAdapter() {
+                @Override
+                public void mouseClicked(MouseEvent e) {
+                    JFileChooser fileChooser = new JFileChooser();
+                    fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+                    int returnValue = fileChooser.showOpenDialog(frame);
+                    if (returnValue == JFileChooser.APPROVE_OPTION) {
+                        Utility.rootPath = fileChooser.getSelectedFile().getPath();
+                        dir.setText(Utility.rootPath);
+                    }
+                }
+            });
             JButton b = new JButton("OK");
             sPanel.add(b);
             if (box.getModel().getSize() == 0) {
@@ -87,7 +103,6 @@ public class MainWindow implements ListSelectionListener, ConnectionListener {
             }
             b.addActionListener(e1 -> {
                 port = box.getSelectedItem().toString();
-                System.out.println("Selected dir: " + dir.getText());
                 settings.setVisible(false);
             });
             settings.getContentPane().add(sPanel);
@@ -159,7 +174,13 @@ public class MainWindow implements ListSelectionListener, ConnectionListener {
             list.clearSelection();
         });
         start.addActionListener(e -> {
-            applicationLayer.start(selected);
+            if (selected != null
+                    && (selected.getStatus() == File.FileStatus.REQUEST
+                    || selected.getStatus() == File.FileStatus.DECLINED)) {
+                applicationLayer.request(selected);
+            } else {
+                applicationLayer.start(selected);
+            }
             int i = list.getSelectedIndex();
             list.clearSelection();
             list.setSelectedIndex(i);
@@ -176,6 +197,9 @@ public class MainWindow implements ListSelectionListener, ConnectionListener {
             } else {
                 applicationLayer.connect(port);
             }
+        });
+        disconnect.addActionListener(e -> {
+            applicationLayer.disconnect();
         });
         frame.add(new JScrollPane(list), BorderLayout.CENTER);
         frame.setPreferredSize(new Dimension(600, 400));
@@ -244,7 +268,7 @@ public class MainWindow implements ListSelectionListener, ConnectionListener {
         delete.setEnabled(true);
         switch (selected.getStatus()) {
             case REQUEST:
-                start.setEnabled(false);
+                start.setEnabled(true);
                 stop.setEnabled(false);
                 break;
             case TRANSFER:

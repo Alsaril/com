@@ -1,8 +1,6 @@
 package com.github.alsaril.application_layer.utility;
 
 import com.github.alsaril.application_layer.ApplicationLayer;
-import com.github.alsaril.application_layer.message.Message;
-import com.github.alsaril.application_layer.message.UploadRequestMessage;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -57,8 +55,7 @@ public class File {
                 setStatus(FileStatus.REQUEST);
                 boolean copy = layer.addFile(this);
                 if (!copy) {
-                    Message message = new UploadRequestMessage(hash, name, size);
-                    layer.addEvent(message, Event.EventType.INNER);
+                    layer.request(this);
                 }
             });
         }
