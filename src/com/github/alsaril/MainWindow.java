@@ -21,6 +21,7 @@ import java.awt.event.WindowEvent;
 
 public class MainWindow implements ListSelectionListener, ConnectionListener {
     static ApplicationLayer l = null;
+    private static ImageIcon con, disc;
 
     static {
         PhysicalLayer.getPortNames();
@@ -206,17 +207,24 @@ public class MainWindow implements ListSelectionListener, ConnectionListener {
         frame.setVisible(true);
     }
 
+    public static ImageIcon loadImage(String fileName) {
+        return new ImageIcon(ClassLoader.getSystemClassLoader().getResource(fileName));
+    }
+
     public static void main(String[] args) {
-        if (args.length < 1) {
-            System.out.println("Not enough arguments");
-            return;
+        if (args.length == 1) {
+            con = new ImageIcon("ic_check_white_24px.png");
+            disc = new ImageIcon("ic_cancel_white_24px.png");
+        } else {
+
+            con = loadImage("ic_check_white_24px.png");
+            disc = loadImage("ic_cancel_white_24px.png");
         }
-        String arg = args[0];
         try {
             UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
         } catch (Exception e) {
         }
-        l = new ApplicationLayer(arg);
+        l = new ApplicationLayer("config");
         l.init();
         new MainWindow(l);
     }
@@ -294,7 +302,6 @@ public class MainWindow implements ListSelectionListener, ConnectionListener {
 
     @Override
     public void stateChanged(ConnectionState state) {
-        ImageIcon ii = new ImageIcon(state == ConnectionState.DISCONNECTED ? "ic_cancel_white_24px.png" : "ic_check_white_24px.png");
-        status.setIcon(ii);
+        status.setIcon(state == ConnectionState.CONNECTED ? con : disc);
     }
 }
